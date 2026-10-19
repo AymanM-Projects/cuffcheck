@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CuffCheck</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-row">
+      <h1>CuffCheck</h1>
+      <!-- Text size. Keyboard: Ctrl/Cmd + and Ctrl/Cmd - do the same. -->
+      <div class="text-size">
+        <button type="button" id="text-smaller" aria-label="Smaller text">A&minus;</button>
+        <button type="button" id="text-larger" aria-label="Larger text">A+</button>
+      </div>
+    </div>
+    <p class="tagline">Checks your blood pressure technique with the camera.</p>
+  </header>
+
+  <!-- One page. Later milestones add the readings, report and "why" sections. -->
+  <main>
+    <section id="camera-section">
+
+      <!-- The video and the canvas sit on top of each other inside .stage.
+           The canvas is where the skeleton is drawn. -->
+      <div class="stage" id="stage">
+        <video id="video" playsinline muted autoplay></video>
+        <canvas id="overlay"></canvas>
+      </div>
+
+      <fieldset class="choice">
+        <legend>Which camera?</legend>
+        <label><input type="radio" name="camera" value="environment" checked> Back camera</label>
+        <label><input type="radio" name="camera" value="user"> Front camera</label>
+      </fieldset>
+
+      <fieldset class="choice">
+        <legend>Which arm wears the cuff?</legend>
+        <label><input type="radio" name="arm" value="left" checked> Left arm</label>
+        <label><input type="radio" name="arm" value="right"> Right arm</label>
+      </fieldset>
+
+      <button id="start-button" type="button">Start camera</button>
+
+      <p id="status" class="status" aria-live="polite">
+        Tap Start camera. Nothing is recorded or uploaded.
+      </p>
+
+      <h2>Checklist</h2>
+      <!-- One row per guideline. The dot is gray (can't see), green (pass) or
+           red (fix this). The word next to it says the same thing for anyone
+           who cannot tell the colors apart. -->
+      <ul id="checklist" class="checklist">
+        <li data-check="framing">
+          <span class="dot unseen"></span><span class="label">Whole body in the picture</span>
+          <span class="state">Can't see</span><span class="reason"></span>
+        </li>
+        <li data-check="seated">
+          <span class="dot unseen"></span><span class="label">Sitting upright</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="back">
+          <span class="dot unseen"></span><span class="label">Back against the chair</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="legs">
+          <span class="dot unseen"></span><span class="label">Legs uncrossed</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="feet">
+          <span class="dot unseen"></span><span class="label">Feet flat on the floor</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="arm">
+          <span class="dot unseen"></span><span class="label">Cuff at heart level</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="rest">
+          <span class="dot unseen"></span><span class="label">Rested 5 minutes</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+        <li data-check="talking">
+          <span class="dot unseen"></span><span class="label">Not talking</span>
+          <span class="state">Not built yet</span><span class="reason"></span>
+        </li>
+      </ul>
+
+      <!-- Stays disabled until the framing check passes. -->
+      <button id="session-button" type="button" disabled>Start check</button>
+
+    </section>
+  </main>
+
+  <footer>
+    <p>CuffCheck checks measurement technique. It does not measure blood pressure or give medical advice.</p>
+  </footer>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,189 @@
+/* CuffCheck styles. One rule: keep it plain so the camera check stands out.
+   White background, black text, one accent color, system font, no animation. */
+
+:root {
+  --accent: #0369a1;   /* one blue; about 5.9:1 contrast on white */
+  --text-scale: 1;     /* the A- / A+ buttons (Milestone 2) change only this */
+}
+
+/* Every size in the app is in rem, so changing --text-scale scales everything. */
+html {
+  font-size: calc(18px * var(--text-scale));
+}
+
+body {
+  margin: 0;
+  padding: 0 1rem 2rem;
+  background: #ffffff;
+  color: #000000;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.5;
+  max-width: 40rem;
+  margin-inline: auto;
+}
+
+h1 {
+  font-size: 2rem;
+  margin: 1rem 0 0;
+}
+
+h2 {
+  font-size: 1.4rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+/* Title on the left, A- / A+ on the right. */
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.text-size {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.text-size button {
+  width: auto;
+  min-width: 3.5rem;
+  min-height: 3rem;
+  padding: 0 0.75rem;
+}
+
+.tagline {
+  margin: 0 0 1rem;
+}
+
+/* The camera picture and the skeleton canvas share one box. */
+.stage {
+  position: relative;
+  width: 100%;
+  background: #000000;
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.stage video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* The front camera is flipped so it acts like a mirror. The canvas is inside
+   .stage, so the skeleton flips together with the picture and still lines up. */
+.stage.mirrored {
+  transform: scaleX(-1);
+}
+
+.choice {
+  border: 2px solid #000000;
+  border-radius: 0.5rem;
+  margin: 1rem 0;
+  padding: 0.5rem 1rem;
+}
+
+.choice label {
+  display: block;
+  padding: 0.5rem 0;      /* tall rows are easy to tap */
+  cursor: pointer;
+}
+
+.choice input {
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+button {
+  display: block;
+  width: 100%;
+  min-height: 3.5rem;      /* big button: easy to tap, easy to see */
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #ffffff;
+  background: var(--accent);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #666666;
+  cursor: wait;
+}
+
+/* Visible focus ring for keyboard users. */
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #000000;
+  outline-offset: 3px;
+}
+
+.status {
+  font-size: 1.25rem;
+  min-height: 3rem;        /* reserve space so the page does not jump */
+}
+
+footer {
+  margin-top: 2rem;
+  border-top: 2px solid #000000;
+  padding-top: 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Checklist: dot | label | state word, with the reason underneath. */
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.checklist li {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  column-gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid #cccccc;
+}
+
+/* The only thing on the page that changes color: the dots. */
+.dot {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  border: 2px solid #000000;
+  background: #999999;      /* gray = could not see */
+}
+
+.dot.pass {
+  background: #1a7f37;      /* green = pass */
+}
+
+.dot.fail {
+  background: #d1242f;      /* red = fix this */
+}
+
+.state {
+  font-weight: 600;
+}
+
+.reason {
+  grid-column: 2 / 4;
+  font-size: 0.9rem;
+}
+
+.reason:empty {
+  display: none;
+}
