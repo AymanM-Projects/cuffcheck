@@ -65,6 +65,7 @@ function handleFrame(frame) {
   const results = runChecks(frame, { cuffArm: radioValue("arm") }, now);
   const phase = getPhase();
   updateChecklist(results);
+  showStep(phase);
   showCoach(results, phase, now);
   if (phase !== "setup") logResults(results, phase, now);
   if ($("opt-numbers").checked) showNumbers(results);
@@ -116,7 +117,7 @@ function updateButtons(phase, results) {
 const STATE_WORDS = { pass: "OK", fail: "Fix this", unseen: "Can't see" };
 const rows = {};
 for (const li of document.querySelectorAll("#checklist li")) {
-  rows[li.dataset.check] = { dot: li.querySelector(".dot"), state: li.querySelector(".state"), reason: li.querySelector(".reason"), last: "" };
+  rows[li.dataset.check] = { li, dot: li.querySelector(".dot"), state: li.querySelector(".state"), reason: li.querySelector(".reason"), last: "" };
 }
 
 // Writes each result into its row, but only when something changed.
@@ -128,9 +129,22 @@ function updateChecklist(results) {
     if (!row || key === row.last) continue;
     row.last = key;
     row.dot.className = "dot " + result.status;
+    row.li.dataset.status = result.status; // tints the whole row green, red or gray
     row.state.textContent = word;
     row.reason.textContent = result.reason;
   }
+}
+
+// Highlights the current step (1 Set up, 2 Rest, 3 Measure); earlier steps show as done.
+const STEP_ORDER = ["setup", "resting", "measuring"];
+let lastStep = "";
+function showStep(phase) {
+  if (phase === lastStep) return;
+  lastStep = phase;
+  const current = STEP_ORDER.indexOf(phase);
+  document.querySelectorAll("#steps li").forEach((li, index) => {
+    li.className = index === current ? "current" : index < current ? "done" : "";
+  });
 }
 
 let lastCoachText = "";
@@ -202,5 +216,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 initReadings(showScreen);
+showStep("setup");
 loadPostureModel().catch((err) => console.warn("Posture model not loaded; rules only.", err));
 showScreen("check");

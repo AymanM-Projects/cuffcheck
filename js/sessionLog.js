@@ -43,10 +43,16 @@ export function downloadLog() {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "cuffcheck-session-" + log.started.slice(0, 19).replace(/[:T]/g, "-") + ".json";
+  link.download = "cuffcheck-session-" + localStamp(new Date(log.started)) + ".json";
   document.body.appendChild(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   return true;
+}
+
+// "2026-10-20-14-04" in the phone's own time zone, so file names match the clock.
+function localStamp(date) {
+  const two = (n) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${two(date.getMonth() + 1)}-${two(date.getDate())}-${two(date.getHours())}-${two(date.getMinutes())}`;
 }

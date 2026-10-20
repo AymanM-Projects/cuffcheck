@@ -53,6 +53,8 @@ The tabs at the top switch between three main screens. Two more appear when need
 
 The A− and A+ buttons, or Ctrl/Cmd with + and −, make all the text smaller or bigger.
 
+On the Check screen, a step strip shows where you are: **1 Set up**, **2 Rest**, **3 Measure**. Steps you have finished turn green. Each checklist dot shows a symbol as well as a color: a check mark for OK, ! for fix this, and ? for can't see.
+
 ---
 
 ## 3. Setting up the phone
@@ -193,7 +195,7 @@ All the coaching wording, the `reason` sentences in `checks.js` and the `LINES` 
 
 ## 8. The session log (for your study)
 
-"Export session results" downloads a file like `cuffcheck-session-2026-10-20-15-04-12.json`. It covers the most recent check session:
+"Export session results" downloads a file like `cuffcheck-session-2026-10-20-15-04.json` (your local date and time). It covers the most recent check session:
 
 ```json
 {

@@ -3,20 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0e7490">
   <title>CuffCheck</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <header class="no-print">
     <div class="header-row">
-      <h1>CuffCheck</h1>
+      <div class="brand">
+        <!-- Our logo, drawn in code: a heart with a check mark. -->
+        <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 20.5s-7.5-4.6-9.2-9.4C1.6 7.6 4 4.5 7.3 4.5c2 0 3.6 1.1 4.7 2.7 1.1-1.6 2.7-2.7 4.7-2.7 3.3 0 5.7 3.1 4.5 6.6-1.7 4.8-9.2 9.4-9.2 9.4z"/>
+          <path class="logo-check" d="M8.2 11.8l2.6 2.6 5-5.2"/>
+        </svg>
+        <div>
+          <h1>CuffCheck</h1>
+          <p class="tagline">Blood pressure technique, checked live</p>
+        </div>
+      </div>
       <!-- Text size. Keyboard: Ctrl/Cmd + and Ctrl/Cmd - do the same. -->
       <div class="text-size">
         <button type="button" id="text-smaller" aria-label="Smaller text">A&minus;</button>
         <button type="button" id="text-larger" aria-label="Larger text">A+</button>
       </div>
     </div>
-    <nav class="tabs">
+    <nav class="tabs" aria-label="Screens">
       <button type="button" data-screen="check">Check</button>
       <button type="button" data-screen="history">My readings</button>
       <button type="button" data-screen="why">Why it matters</button>
@@ -28,7 +39,14 @@
     <section id="screen-check" class="screen">
       <p id="demo-banner" class="demo-banner" hidden>DEMO MODE: rest shortened to 30 seconds. For filming only.</p>
 
-      <details id="setup" class="setup" open>
+      <!-- Where the user is in the session. main.js marks the current step. -->
+      <ol id="steps" class="steps">
+        <li data-step="setup"><span class="step-number">1</span> Set up</li>
+        <li data-step="resting"><span class="step-number">2</span> Rest</li>
+        <li data-step="measuring"><span class="step-number">3</span> Measure</li>
+      </ol>
+
+      <details id="setup" class="card setup" open>
         <summary>Setup</summary>
         <fieldset class="choice">
           <legend>Which camera?</legend>
@@ -59,7 +77,13 @@
       </div>
 
       <!-- The ONE coaching message at a time. -->
-      <p id="coach" class="coach">Prop the phone so it sees you from the side, then press Start camera.</p>
+      <div class="coach-card">
+        <svg class="coach-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z"/>
+          <path class="wave" d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>
+        </svg>
+        <p id="coach" class="coach">Prop the phone so it sees you from the side, then press Start camera.</p>
+      </div>
 
       <div class="session-buttons">
         <button id="session-button" type="button" disabled>Start check</button>
@@ -67,30 +91,32 @@
         <button id="stop-button" type="button" class="secondary" hidden>Stop check</button>
       </div>
 
-      <h2>Checklist</h2>
-      <!-- Dot: gray = can't see, green = OK, red = fix this. The word says the same. -->
-      <ul id="checklist" class="checklist">
-        <li data-check="framing"><span class="dot unseen"></span><span>Whole body in the picture</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="seated"><span class="dot unseen"></span><span>Sitting upright</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="back"><span class="dot unseen"></span><span>Back against the chair</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="legs"><span class="dot unseen"></span><span>Legs uncrossed</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="feet"><span class="dot unseen"></span><span>Feet flat on the floor</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="arm"><span class="dot unseen"></span><span>Cuff at heart level</span><span class="state">Can't see</span><span class="reason"></span></li>
-        <li data-check="rest"><span class="dot unseen"></span><span>Rested 5 minutes</span><span class="state">Not started</span><span class="reason"></span></li>
-        <li data-check="talking"><span class="dot unseen"></span><span>Not talking</span><span class="state">Can't see</span><span class="reason"></span></li>
-      </ul>
-      <p id="numbers" class="numbers" hidden></p>
+      <div class="card">
+        <h2>Checklist</h2>
+        <!-- Dot: gray ? = can't see, green check = OK, red ! = fix this. The word says the same. -->
+        <ul id="checklist" class="checklist">
+          <li data-check="framing"><span class="dot unseen"></span><span>Whole body in the picture</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="seated"><span class="dot unseen"></span><span>Sitting upright</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="back"><span class="dot unseen"></span><span>Back against the chair</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="legs"><span class="dot unseen"></span><span>Legs uncrossed</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="feet"><span class="dot unseen"></span><span>Feet flat on the floor</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="arm"><span class="dot unseen"></span><span>Cuff at heart level</span><span class="state">Can't see</span><span class="reason"></span></li>
+          <li data-check="rest"><span class="dot unseen"></span><span>Rested 5 minutes</span><span class="state">Not started</span><span class="reason"></span></li>
+          <li data-check="talking"><span class="dot unseen"></span><span>Not talking</span><span class="state">Can't see</span><span class="reason"></span></li>
+        </ul>
+        <p id="numbers" class="numbers" hidden></p>
+      </div>
     </section>
 
     <section id="screen-reading" class="screen" hidden>
       <h2>Enter your reading</h2>
       <p id="verified-preview" class="verified-preview"></p>
-      <form id="reading-form" novalidate>
-        <label for="systolic">Systolic (top number)</label>
+      <form id="reading-form" class="card" novalidate>
+        <label for="systolic">Systolic <span class="unit">top number, mmHg</span></label>
         <input id="systolic" type="number" inputmode="numeric" min="60" max="260">
-        <label for="diastolic">Diastolic (bottom number)</label>
+        <label for="diastolic">Diastolic <span class="unit">bottom number, mmHg</span></label>
         <input id="diastolic" type="number" inputmode="numeric" min="30" max="160">
-        <label for="pulse">Pulse</label>
+        <label for="pulse">Pulse <span class="unit">beats per minute</span></label>
         <input id="pulse" type="number" inputmode="numeric" min="30" max="220">
         <p id="form-error" class="form-error" role="alert"></p>
         <button type="submit">Save reading</button>
@@ -98,11 +124,13 @@
       </form>
     </section>
 
-    <section id="screen-safety" class="screen safety" hidden>
-      <h2>This reading is very high</h2>
-      <p class="big">Rest 5 minutes and measure again. If it's still this high, or you have chest pain, shortness of breath, back pain, numbness, weakness, vision changes or trouble speaking, call 911.</p>
-      <a class="button" href="https://www.google.com/maps/search/urgent+care+near+me" target="_blank" rel="noopener noreferrer">Find care near me</a>
-      <button type="button" data-screen="history" class="secondary">Go to my readings</button>
+    <section id="screen-safety" class="screen" hidden>
+      <div class="card alert">
+        <h2>This reading is very high</h2>
+        <p class="big">Rest 5 minutes and measure again. If it's still this high, or you have chest pain, shortness of breath, back pain, numbness, weakness, vision changes or trouble speaking, call 911.</p>
+        <a class="button danger" href="https://www.google.com/maps/search/urgent+care+near+me" target="_blank" rel="noopener noreferrer">Find care near me</a>
+        <button type="button" data-screen="history" class="secondary">Go to my readings</button>
+      </div>
     </section>
 
     <section id="screen-history" class="screen" hidden>
@@ -116,31 +144,36 @@
     </section>
 
     <section id="screen-report" class="screen" hidden>
-      <div id="report-content" class="report"></div>
+      <div id="report-content" class="card report"></div>
       <button id="print-button" type="button" class="no-print">Print or save as PDF</button>
       <button type="button" data-screen="history" class="secondary no-print">Back</button>
     </section>
 
     <section id="screen-why" class="screen" hidden>
       <h2>Why technique matters</h2>
-      <article class="card">
+      <article class="card fact">
+        <p class="stat">3%</p>
         <p class="big">Only 3% of patients measured their blood pressure at home without a single error.</p>
         <p class="source">Source: Nessler K, et al. The quality of patients' self-blood pressure measurements: a cross-sectional study. BMC Cardiovascular Disorders 21, 539 (2021). <a href="https://doi.org/10.1186/s12872-021-02351-5" target="_blank" rel="noopener noreferrer">doi.org/10.1186/s12872-021-02351-5</a></p>
       </article>
-      <article class="card">
+      <article class="card fact">
+        <p class="stat">+7 mmHg</p>
         <p class="big">An arm hanging at your side raised the top number by about 7 mmHg (6.5 mmHg on average).</p>
         <p class="source">Source: Liu H, et al. Arm Position and Blood Pressure Readings: The ARMS Crossover Randomized Clinical Trial. JAMA Internal Medicine 184(12), 2024. <a href="https://doi.org/10.1001/jamainternmed.2024.5213" target="_blank" rel="noopener noreferrer">doi.org/10.1001/jamainternmed.2024.5213</a></p>
       </article>
-      <article class="card">
+      <article class="card fact">
+        <p class="stat">Wrong meds</p>
         <p class="big">Wrong readings can lead to wrong medication changes, including medicine a patient did not need.</p>
         <p class="source">Source: Nessler K, et al. (2021), discussion section, same article as above.</p>
       </article>
 
-      <h2>About CuffCheck</h2>
-      <p>CuffCheck checks measurement technique. It does not measure blood pressure, does not diagnose, and does not give medical advice. Your own cuff measures; your clinician makes every treatment decision.</p>
-      <p><strong>Privacy:</strong> all video processing happens in your browser. No video, images or sound are ever recorded, uploaded or saved. Only pass/fail results and the numbers you type are stored, on this device.</p>
-      <p><strong>Dataset credit:</strong> the posture model was trained on the MultiPosture dataset, Zenodo record 14230872, CC BY 4.0 (Carneros-Prado et al.).</p>
-      <p>Pose tracking by Google MediaPipe (Apache 2.0). Built by two high school students for the 2026 Congressional App Challenge.</p>
+      <div class="card">
+        <h2>About CuffCheck</h2>
+        <p>CuffCheck checks measurement technique. It does not measure blood pressure, does not diagnose, and does not give medical advice. Your own cuff measures; your clinician makes every treatment decision.</p>
+        <p><strong>Privacy:</strong> all video processing happens in your browser. No video, images or sound are ever recorded, uploaded or saved. Only pass/fail results and the numbers you type are stored, on this device.</p>
+        <p><strong>Dataset credit:</strong> the posture model was trained on the MultiPosture dataset, Zenodo record 14230872, CC BY 4.0 (Carneros-Prado et al.).</p>
+        <p>Pose tracking by Google MediaPipe (Apache 2.0). Built by two high school students for the 2026 Congressional App Challenge.</p>
+      </div>
     </section>
   </main>
 

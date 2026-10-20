@@ -136,8 +136,12 @@ export function renderHistory() {
   const readings = loadReadings().slice().reverse();
   if (readings.length === 0) list.append(element("li", "No readings yet."));
   for (const r of readings) {
-    const item = element("li", `${formatDate(r.date)}: ${r.systolic}/${r.diastolic}, pulse ${r.pulse}${r.demo ? " (demo mode)" : ""} `);
+    const item = element("li");
+    const numbers = element("span", `${r.systolic}/${r.diastolic} `, "history-bp");
+    numbers.append(element("small", "mmHg"));
+    item.append(numbers);
     item.append(element("span", r.verified ? "Verified" : "Not verified", r.verified ? "badge-verified" : "badge-not"));
+    item.append(element("span", `Pulse ${r.pulse} · ${formatDate(r.date)}${r.demo ? " (demo mode)" : ""}`, "history-date"));
     list.append(item);
   }
 }

@@ -89,3 +89,20 @@ _(Fill this in before submitting. Be specific: values, phones, what you rewrote.
 - False alarms we found and fixed: _(list)_.
 - Own-session test of the posture model: _(how many sessions, results)_.
 - Changes we made to the generated code: _(list)_.
+
+## Visual theme refresh (Oct 20, 2026)
+
+We asked Claude to make the app more visually appealing while keeping our design rules (white background, dark text, one accent color, system font, no animation).
+
+**What Claude generated:**
+
+- A new `style.css`: a deep teal accent (`#0e7490`, chosen with the ui-ux-pro-max design search and darkened to pass contrast), card panels, a tab bar, and checklist rows tinted green, red or gray. Each dot shows a symbol (check, !, ?), so color is never the only signal. Every text and background pair meets WCAG AA contrast.
+- In `index.html`: the heart-and-check logo drawn as inline SVG, the 1-2-3 step strip (Set up, Rest, Measure), the coaching card with a speaker icon, units on the reading form, big stat numbers on the Why cards, and a "Camera is off" placeholder.
+- In `js/main.js`: `showStep()` and the row tint (`data-status`). In `js/readings.js`: history entries as cards.
+- Claude checked every screen fits phones 320, 375 and 414 pixels wide at normal and largest text, and fixed three overflows it found. The 33 tests still pass.
+
+**What we (the students) changed or decided:**
+
+_(Fill in: did you keep teal or pick another accent, wording changes, what your testers said about the new look.)_
+
+**Fix found while re-testing (Oct 20, 2026):** exported session files were named with UTC time instead of local time. Claude added `localStamp()` in `js/sessionLog.js` so the file name matches the phone's clock.
