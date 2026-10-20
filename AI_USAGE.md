@@ -44,3 +44,48 @@ _(Fill this in before moving on.)_
 - Chose the default cuff arm (currently left) because: _(reason)_.
 - Tested the framing gate on: _(phones)_. Distance from the camera that worked: _(meters)_.
 - Changes we made to the generated code: _(list them, or "none yet")_.
+
+## Milestone 3 - seated, back, legs and feet rules + tests (Oct 19, 2026)
+
+**What Claude generated:**
+
+- `js/checks.js`: `checkSeatedUpright`, `checkBackSupported`, `checkLegsUncrossed`, `checkFeetFlat`, the helpers `trunkLeanAngle`, `angleAt`, `sideOrder`, and the first-draft thresholds (`HIP_ANGLE_MIN/MAX`, `BACK_LEAN_LIMIT`, `BACK_STEADY_LIMIT`, `BACK_MIN_SAMPLES`, `CROSS_MIN_GAP`, `FEET_MIN_DROP`) and wording.
+- `js/engine.js`: the five-check list, the 10-second trunk-lean history (`rememberLean`, `BACK_WINDOW_MS`), and the optional clock argument so tests do not wait.
+- `tests/checks.test.js`: the fake side-view and front-view bodies and 23 tests.
+- Claude ran `node --test` and the page in Chrome with a stand-in stream.
+
+**What we (the students) designed, changed, tuned, tested or wrote ourselves:**
+
+_(Fill this in before moving on.)_
+
+- Tuned thresholds after live testing: _(which ones, from what to what, and why)_.
+- Rewrote the coaching wording for: _(which checks)_.
+- Tests we added or changed: _(list)_.
+- False alarms we saw and how we fixed them: _(list)_.
+- Tested on: _(phones, chair type, distance, side view or angled)_.
+
+## Milestones 4 to 10 - built in one pass at our request (Oct 19, 2026)
+
+We asked Claude to build the remaining milestones together so we could test the whole app at once. Claude ran the test suite and checked every screen in Chrome with a stand-in video stream; it could not test with a real person, a real phone, or a real cuff.
+
+**What Claude generated:**
+
+- **Milestone 4, arm at heart level:** `checkArmAtHeart` in `js/checks.js`. Claude changed the brief's "midpoint of shoulder to elbow" into a tunable `CUFF_RATIO` (default 0.6), because at 0.5 an arm hanging at your side would pass. Only height is compared, so an arm resting forward on a table is fine.
+- **Milestone 5, rest, stillness, talking, coaching:** `motionAmount`, `nextRestSeconds`, `checkRest`, `checkNotTalking` in `js/checks.js`; the phases, rest timer, histories and Verified decision in `js/engine.js`; all of `js/coach.js`; the Face Landmarker, the microphone level and the picture-unit scaling in `js/camera.js`; the Demo mode switch and banner.
+- **Milestone 6, readings:** all of `js/readings.js` (validation, safety levels, history, report) and the reading, safety, history and report screens in `index.html`.
+- **Milestone 7, why it matters and About:** the three cards and the About text. Claude found the sources (Nessler et al. 2021; Liu et al. 2024, the ARMS trial) and checked the numbers against them.
+- **Milestone 8, session log:** all of `js/sessionLog.js` and the Export button.
+- **Milestone 9, posture model:** `training/train.py`, `training/README.md`, `js/model.js`, `model/posture_model.json` (produced by running the script), and `tests/model.test.js`. Claude inspected the CSV and found it holds world landmarks for all 33 joints, filmed from the front, and wrote the conversion that turns side views to match.
+- **Milestone 10, polish:** fixed buttons that stayed visible when hidden, fixed the header and tabs overflowing on 320-pixel phones, checked every screen fits at 320, 375 and 414 pixels wide at normal and largest text, finished the README, wrote `HOW_IT_WORKS.md`, and added `.gitignore` so the training CSV is not committed.
+- Tests: rewrote `tests/checks.test.js` and added `tests/app.test.js` (33 tests in total).
+
+**What we (the students) designed, changed, tuned, tested or wrote ourselves:**
+
+_(Fill this in before submitting. Be specific: values, phones, what you rewrote.)_
+
+- Tested on: _(iPhone model + Safari, Android model + Chrome)_, with a real cuff: _(model)_.
+- Thresholds we tuned using "Show numbers for tuning": _(name, old value, new value, why)_.
+- Coaching wording we rewrote: _(which lines)_.
+- False alarms we found and fixed: _(list)_.
+- Own-session test of the posture model: _(how many sessions, results)_.
+- Changes we made to the generated code: _(list)_.

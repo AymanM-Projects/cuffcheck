@@ -1,154 +1,97 @@
-/* CuffCheck styles. One rule: keep it plain so the camera check stands out.
-   White background, black text, one accent color, system font, no animation. */
+/* CuffCheck styles. Plain on purpose so the camera check stands out:
+   white background, black text, one accent color, system font, no animation
+   except the checklist dots changing color. */
 
 :root {
-  --accent: #0369a1;   /* one blue; about 5.9:1 contrast on white */
-  --text-scale: 1;     /* the A- / A+ buttons (Milestone 2) change only this */
+  --accent: #0369a1;   /* the one accent color; about 5.9:1 contrast on white */
+  --text-scale: 1;     /* the A- / A+ buttons change only this */
 }
 
-/* Every size in the app is in rem, so changing --text-scale scales everything. */
-html {
-  font-size: calc(18px * var(--text-scale));
-}
+/* Every size is in rem, so changing --text-scale scales everything. */
+html { font-size: calc(18px * var(--text-scale)); }
 
 body {
-  margin: 0;
+  margin: 0 auto;
   padding: 0 1rem 2rem;
+  max-width: 40rem;
   background: #ffffff;
   color: #000000;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
-  max-width: 40rem;
-  margin-inline: auto;
 }
 
-h1 {
-  font-size: 2rem;
-  margin: 1rem 0 0;
-}
+/* "hidden" must always win, even over "display: block" on buttons below. */
+[hidden] { display: none !important; }
 
-h2 {
-  font-size: 1.4rem;
-  margin: 1.5rem 0 0.5rem;
-}
+h1 { font-size: 2rem; margin: 1rem 0 0; }
+h2 { font-size: 1.4rem; margin: 1.5rem 0 0.5rem; }
+a { color: var(--accent); }
 
-/* Title on the left, A- / A+ on the right. */
-.header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
+.header-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.5rem 1rem; }
+.text-size { display: flex; gap: 0.5rem; }
+.text-size button { width: auto; min-width: 3.5rem; min-height: 3rem; padding: 0 0.75rem; margin: 0; }
 
-.text-size {
-  display: flex;
-  gap: 0.5rem;
-}
+/* Screen tabs */
+/* Tabs share the row and wrap onto two lines on small phones or large text. */
+.tabs { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.75rem 0; }
+.tabs button { flex: 1 1 6rem; width: auto; margin: 0; padding: 0.25rem 0.5rem; min-height: 3rem; font-size: 1rem; background: #ffffff; color: #000000; border: 2px solid #000000; }
+.tabs button[aria-current="page"] { background: #000000; color: #ffffff; }
 
-.text-size button {
-  width: auto;
-  min-width: 3.5rem;
-  min-height: 3rem;
-  padding: 0 0.75rem;
-}
-
-.tagline {
-  margin: 0 0 1rem;
-}
-
-/* The camera picture and the skeleton canvas share one box. */
-.stage {
-  position: relative;
-  width: 100%;
-  background: #000000;
-  border-radius: 0.5rem;
-  overflow: hidden;
-}
-
-.stage video {
+/* Buttons: big, easy to tap, easy to see. Links styled as buttons match. */
+button, .button {
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  height: auto;
-}
-
-.stage canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-/* The front camera is flipped so it acts like a mirror. The canvas is inside
-   .stage, so the skeleton flips together with the picture and still lines up. */
-.stage.mirrored {
-  transform: scaleX(-1);
-}
-
-.choice {
-  border: 2px solid #000000;
-  border-radius: 0.5rem;
-  margin: 1rem 0;
+  min-height: 3.5rem;
+  margin: 0.5rem 0;
   padding: 0.5rem 1rem;
-}
-
-.choice label {
-  display: block;
-  padding: 0.5rem 0;      /* tall rows are easy to tap */
-  cursor: pointer;
-}
-
-.choice input {
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-right: 0.5rem;
-  vertical-align: middle;
-}
-
-button {
-  display: block;
-  width: 100%;
-  min-height: 3.5rem;      /* big button: easy to tap, easy to see */
   font: inherit;
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   font-weight: 600;
+  text-align: center;
+  text-decoration: none;
   color: #ffffff;
   background: var(--accent);
-  border: none;
+  border: 2px solid var(--accent);
   border-radius: 0.5rem;
   cursor: pointer;
 }
-
-button:disabled {
-  background: #666666;
-  cursor: wait;
-}
+button.secondary { background: #ffffff; color: #000000; border-color: #000000; }
+button:disabled { background: #666666; border-color: #666666; color: #ffffff; cursor: not-allowed; }
 
 /* Visible focus ring for keyboard users. */
-button:focus-visible,
-input:focus-visible {
+button:focus-visible, .button:focus-visible, input:focus-visible, summary:focus-visible {
   outline: 3px solid #000000;
   outline-offset: 3px;
 }
 
-.status {
-  font-size: 1.25rem;
-  min-height: 3rem;        /* reserve space so the page does not jump */
-}
+.setup summary { font-size: 1.2rem; font-weight: 600; cursor: pointer; padding: 0.5rem 0; }
+.choice { border: 2px solid #000000; border-radius: 0.5rem; margin: 0.75rem 0; padding: 0.5rem 1rem; }
+.choice label { display: block; padding: 0.5rem 0; cursor: pointer; }
+.choice input { width: 1.5rem; height: 1.5rem; margin-right: 0.5rem; vertical-align: middle; }
 
-footer {
-  margin-top: 2rem;
-  border-top: 2px solid #000000;
-  padding-top: 0.5rem;
-  font-size: 0.9rem;
+.status { font-size: 1.1rem; min-height: 1.5rem; }
+.demo-banner { border: 3px solid #000000; padding: 0.5rem; font-weight: 700; font-size: 1.2rem; }
+
+/* The camera picture and the skeleton canvas share one box. */
+.stage { position: relative; width: 100%; background: #000000; border-radius: 0.5rem; overflow: hidden; }
+.stage video { display: block; width: 100%; height: auto; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Front camera acts like a mirror; the canvas flips with it and still lines up. */
+.stage.mirrored { transform: scaleX(-1); }
+
+/* One large coaching message at a time. */
+.coach {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.3;
+  min-height: 4.5rem;  /* reserve space so the page does not jump */
+  border-left: 0.5rem solid var(--accent);
+  padding: 0.25rem 0 0.25rem 0.75rem;
 }
 
 /* Checklist: dot | label | state word, with the reason underneath. */
-.checklist {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1rem;
-}
-
+.checklist { list-style: none; padding: 0; margin: 0 0 1rem; }
 .checklist li {
   display: grid;
   grid-template-columns: 1.5rem 1fr auto;
@@ -157,33 +100,50 @@ footer {
   padding: 0.6rem 0;
   border-bottom: 1px solid #cccccc;
 }
+.dot { width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 2px solid #000000; background: #999999; }
+.dot.pass { background: #1a7f37; }  /* green = OK */
+.dot.fail { background: #d1242f; }  /* red = fix this */
+.state { font-weight: 600; }
+.reason { grid-column: 2 / 4; font-size: 0.9rem; }
+.reason:empty { display: none; }
+.numbers { font-family: ui-monospace, monospace; font-size: 0.85rem; overflow-wrap: anywhere; }
 
-/* The only thing on the page that changes color: the dots. */
-.dot {
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: 50%;
+/* Reading form */
+label[for] { display: block; font-weight: 600; margin-top: 1rem; }
+input[type="number"] {
+  box-sizing: border-box;
+  width: 100%;
+  font: inherit;
+  font-size: 1.5rem;
+  padding: 0.5rem;
   border: 2px solid #000000;
-  background: #999999;      /* gray = could not see */
+  border-radius: 0.5rem;
 }
+.form-error { color: #b00020; font-weight: 600; min-height: 1.5rem; }
+.verified-preview { font-size: 1.2rem; padding: 0.75rem; border-radius: 0.5rem; }
 
-.dot.pass {
-  background: #1a7f37;      /* green = pass */
-}
+/* The Verified badge: a word plus a border, never color alone. */
+.badge-verified, .badge-not { display: inline-block; font-weight: 700; padding: 0 0.4rem; border-radius: 0.3rem; }
+.badge-verified { border: 2px solid #1a7f37; color: #1a7f37; }
+.badge-not { border: 2px dashed #555555; color: #333333; }
+.verified-preview.badge-verified, .verified-preview.badge-not { display: block; }
 
-.dot.fail {
-  background: #d1242f;      /* red = fix this */
-}
+.history { list-style: none; padding: 0; }
+.history li { padding: 0.6rem 0; border-bottom: 1px solid #cccccc; }
+.note { border: 2px solid var(--accent); padding: 0.75rem; border-radius: 0.5rem; font-weight: 600; }
 
-.state {
-  font-weight: 600;
-}
+.safety h2 { font-size: 1.8rem; }
+.big { font-size: 1.3rem; font-weight: 600; }
+.card { border: 2px solid #000000; border-radius: 0.5rem; padding: 0.25rem 1rem; margin: 1rem 0; }
+.source { font-size: 0.9rem; overflow-wrap: anywhere; }
 
-.reason {
-  grid-column: 2 / 4;
-  font-size: 0.9rem;
-}
+.report table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+.report th, .report td { border: 1px solid #000000; padding: 0.3rem 0.5rem; text-align: left; }
 
-.reason:empty {
-  display: none;
+footer { margin-top: 2rem; border-top: 2px solid #000000; padding-top: 0.5rem; font-size: 0.9rem; }
+
+/* Printing the report: show only the report and the footer. */
+@media print {
+  .no-print, .screen:not(#screen-report) { display: none !important; }
+  body { max-width: none; }
 }

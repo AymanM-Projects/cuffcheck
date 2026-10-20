@@ -1,5 +1,6 @@
-// camera.js - starts the camera, loads MediaPipe Pose, and draws the skeleton
-// on every new video frame. Everything runs inside the browser. No frame is
+// camera.js - the app's senses. Starts the camera, loads MediaPipe Pose and
+// Face, runs them on every new video frame, draws the skeleton, and reads the
+// microphone level. Everything runs inside the browser. No frame or sound is
 // ever saved, recorded or sent anywhere.
 
 import { isSeen } from "./checks.js"; // same rule the checks use for "can't see"
@@ -12,154 +13,202 @@ const POSE_MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 // If "lite" is jittery on your phone, try the bigger "full" model instead:
 // "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+const FACE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
 
 // ---- Tuning ----
-const CAMERA_WIDTH = 640;          // TEAM TUNES THIS - smaller is faster on old phones
+const CAMERA_WIDTH = 640;        // TEAM TUNES THIS - smaller is faster on old phones
 const CAMERA_HEIGHT = 480;
+const FACE_EVERY_N_FRAMES = 3;   // TEAM TUNES THIS - the face model is slow, so skip frames
 const LINE_COLOR = "#ffffff";
-const LINE_OUTLINE = "#000000";    // a dark edge keeps white lines visible on light clothes
+const LINE_OUTLINE = "#000000";  // a dark edge keeps white lines visible on light clothes
 
-// ---- Module state (one camera, one model, one draw loop) ----
-let PoseLandmarker = null; // the MediaPipe class, filled in by loadPoseModel()
-let poseLandmarker = null; // the loaded model
-let stream = null;         // the live camera stream
-let animationId = null;    // handle for the draw loop so we can stop it
-let lastVideoTime = -1;    // so we only run the model when a NEW frame arrived
+// ---- Module state ----
+let vision = null;         // the MediaPipe library, loaded once
+let poseLandmarker = null;
+let faceLandmarker = null; // stays null if the face model fails; talking then uses the mic
+let stream = null;
+let animationId = null;
+let lastVideoTime = -1;
+let frameCount = 0;
+let lastJawOpen = null;
+let audio = null;          // { context, stream, analyser, samples } while the mic is on
 
 // Turns the camera on and shows it in the <video>. facing is "user" (front)
-// or "environment" (back). We ask for a modest size: the skeleton does not
-// need HD, and smaller frames run faster on a phone.
+// or "environment" (back). A modest size keeps phones fast.
 export async function startCamera(videoEl, facing) {
-  stopTracking(); // stop the old loop and camera first, so the model is never
-                  // asked about a frame that does not exist yet (switching cameras)
+  stopTracking(); // stop any old loop and camera first (switching cameras)
   stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: facing }, // "ideal" so a laptop with one camera still works
-      width: { ideal: CAMERA_WIDTH },
-      height: { ideal: CAMERA_HEIGHT },
-    },
+    video: { facingMode: { ideal: facing }, width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT } },
     audio: false,
   });
   videoEl.srcObject = stream;
   await videoEl.play();
-  await waitForVideoSize(videoEl);
-}
-
-// play() can resolve before the browser knows the frame size. The canvas
-// needs that size, so wait for it.
-function waitForVideoSize(videoEl) {
-  return new Promise((resolve) => {
-    if (videoEl.videoWidth > 0) return resolve();
-    videoEl.addEventListener("loadedmetadata", () => resolve(), { once: true });
-  });
-}
-
-// Downloads MediaPipe (once) and builds the pose model. Tries the GPU first
-// because it is much faster; falls back to CPU on devices without WebGL.
-export async function loadPoseModel() {
-  if (poseLandmarker) return; // already loaded
-  const vision = await import(`${MEDIAPIPE_URL}/vision_bundle.mjs`);
-  PoseLandmarker = vision.PoseLandmarker;
-  const files = await vision.FilesetResolver.forVisionTasks(WASM_URL);
-  try {
-    poseLandmarker = await createLandmarker(files, "GPU");
-  } catch (err) {
-    console.warn("GPU not available, using CPU instead.", err);
-    poseLandmarker = await createLandmarker(files, "CPU");
+  if (videoEl.videoWidth === 0) {
+    await new Promise((resolve) => videoEl.addEventListener("loadedmetadata", resolve, { once: true }));
   }
 }
 
-function createLandmarker(files, delegate) {
-  return PoseLandmarker.createFromOptions(files, {
+// Downloads MediaPipe (once) and builds the pose and face models. Tries the
+// GPU first because it is much faster; falls back to the CPU.
+export async function loadModels() {
+  if (poseLandmarker) return;
+  vision = await import(`${MEDIAPIPE_URL}/vision_bundle.mjs`);
+  const files = await vision.FilesetResolver.forVisionTasks(WASM_URL);
+  poseLandmarker = await withGpuOrCpu((delegate) => vision.PoseLandmarker.createFromOptions(files, {
     baseOptions: { modelAssetPath: POSE_MODEL_URL, delegate },
     runningMode: "VIDEO", // "VIDEO" lets the model track between frames
-    numPoses: 1,          // we only care about the one person taking the reading
-  });
+    numPoses: 1,          // only the one person taking the reading
+  }));
+  try {
+    faceLandmarker = await withGpuOrCpu((delegate) => vision.FaceLandmarker.createFromOptions(files, {
+      baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate },
+      runningMode: "VIDEO",
+      numFaces: 1,
+      outputFaceBlendshapes: true, // gives the "jawOpen" score we use for talking
+    }));
+  } catch (err) {
+    console.warn("Face model failed to load; talking will be checked with the microphone only.", err);
+  }
 }
 
-// Runs the model on every new frame, draws the skeleton, and hands the
-// landmarks to onLandmarks (the checks will use this from Milestone 2 on).
-export function startTracking(videoEl, canvasEl, onLandmarks) {
+async function withGpuOrCpu(create) {
+  try {
+    return await create("GPU");
+  } catch (err) {
+    console.warn("GPU not available, using CPU instead.", err);
+    return create("CPU");
+  }
+}
+
+// Runs the models on every new frame, draws the skeleton, and hands a frame
+// summary to onFrame: { landmarks, worldLandmarks, jawOpen, micLevel }.
+export function startTracking(videoEl, canvasEl, onFrame) {
   if (animationId) cancelAnimationFrame(animationId); // never run two loops
   const ctx = canvasEl.getContext("2d");
   canvasEl.width = videoEl.videoWidth;   // draw in the same pixel grid as the video
   canvasEl.height = videoEl.videoHeight;
+  const aspect = videoEl.videoWidth / videoEl.videoHeight;
   lastVideoTime = -1;
 
-  function onFrame() {
-    // The screen can refresh faster than the camera. Only run the model when
-    // the video actually moved on, so we never waste work on the same frame.
+  function loop() {
+    // Only run the models when the video moved on to a NEW frame.
     if (videoEl.videoWidth > 0 && videoEl.currentTime !== lastVideoTime) {
       lastVideoTime = videoEl.currentTime;
       try {
-        const result = poseLandmarker.detectForVideo(videoEl, performance.now());
-        const landmarks = result.landmarks[0] || null; // the first person, or null if nobody is seen
+        const now = performance.now();
+        const pose = poseLandmarker.detectForVideo(videoEl, now);
+        const landmarks = pose.landmarks[0] || null;
         drawSkeleton(ctx, landmarks);
-        onLandmarks(landmarks);
+        if (faceLandmarker && frameCount++ % FACE_EVERY_N_FRAMES === 0) {
+          lastJawOpen = readJawOpen(faceLandmarker.detectForVideo(videoEl, now));
+        }
+        onFrame({
+          landmarks: toPictureUnits(landmarks, aspect),
+          worldLandmarks: pose.worldLandmarks[0] || null,
+          jawOpen: lastJawOpen,
+          micLevel: readMicLevel(),
+        });
       } catch (err) {
-        // One bad frame should not silently end the whole session.
-        console.error("Pose model failed on this frame.", err);
+        console.error("A model failed on this frame.", err); // one bad frame should not end the session
       }
     }
-    animationId = requestAnimationFrame(onFrame);
+    animationId = requestAnimationFrame(loop);
   }
-  animationId = requestAnimationFrame(onFrame);
+  animationId = requestAnimationFrame(loop);
 }
 
-// Stops the draw loop and turns the camera off (also saves battery when the
-// page is hidden).
 export function stopTracking() {
   if (animationId) cancelAnimationFrame(animationId);
   animationId = null;
-  stopStream();
-}
-
-function stopStream() {
-  if (!stream) return;
-  for (const track of stream.getTracks()) track.stop();
+  if (stream) for (const track of stream.getTracks()) track.stop();
   stream = null;
 }
 
-// Draws lines between the standard body joints, then a dot on each joint.
-// Landmark x and y are fractions of the frame (0 to 1), so we multiply by
-// the canvas size to get pixels.
+// MediaPipe gives x as a fraction of the WIDTH and y as a fraction of the
+// HEIGHT. Multiplying x by width/height puts both in the same units, so the
+// checks measure true angles. (Drawing still uses the original numbers.)
+function toPictureUnits(landmarks, aspect) {
+  if (!landmarks) return null;
+  return landmarks.map((p) => ({ ...p, x: p.x * aspect }));
+}
+
+// The face model scores 52 expressions from 0 to 1; "jawOpen" is how open the mouth is.
+function readJawOpen(faceResult) {
+  const shapes = faceResult.faceBlendshapes[0];
+  if (!shapes) return null; // no face found this frame
+  const jaw = shapes.categories.find((c) => c.categoryName === "jawOpen");
+  return jaw ? jaw.score : null;
+}
+
+// ---- Microphone (only the loudness is used; nothing is recorded) ----
+
+// Must be called from a button tap (phones only allow audio after a tap).
+export async function startMicrophone() {
+  if (audio) return;
+  const micStream = await navigator.mediaDevices.getUserMedia({
+    // Noise suppression helps ignore the steady hum of the cuff's pump.
+    audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false },
+    video: false,
+  });
+  const context = new AudioContext();
+  await context.resume();
+  const source = context.createMediaStreamSource(micStream);
+  const voiceFilter = context.createBiquadFilter(); // keep the speech range, drop low hum
+  voiceFilter.type = "bandpass";
+  voiceFilter.frequency.value = 1000; // TEAM TUNES THIS
+  voiceFilter.Q.value = 0.7;
+  const analyser = context.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(voiceFilter);
+  voiceFilter.connect(analyser); // not connected to the speakers, so no echo
+  audio = { context, stream: micStream, analyser, samples: new Float32Array(analyser.fftSize) };
+}
+
+export function stopMicrophone() {
+  if (!audio) return;
+  for (const track of audio.stream.getTracks()) track.stop();
+  audio.context.close();
+  audio = null;
+}
+
+// Loudness of the last few milliseconds (root mean square), or null if off.
+function readMicLevel() {
+  if (!audio) return null;
+  audio.analyser.getFloatTimeDomainData(audio.samples);
+  let sum = 0;
+  for (const s of audio.samples) sum += s * s;
+  return Math.sqrt(sum / audio.samples.length);
+}
+
+// ---- Drawing ----
+
+// Lines between the standard body joints, then a dot on each visible joint.
 function drawSkeleton(ctx, landmarks) {
-  const w = ctx.canvas.width;
-  const h = ctx.canvas.height;
+  const w = ctx.canvas.width, h = ctx.canvas.height;
   ctx.clearRect(0, 0, w, h);
   if (!landmarks) return;
-
-  for (const { start, end } of PoseLandmarker.POSE_CONNECTIONS) {
-    const a = landmarks[start];
-    const b = landmarks[end];
+  ctx.lineCap = "round";
+  for (const { start, end } of vision.PoseLandmarker.POSE_CONNECTIONS) {
+    const a = landmarks[start], b = landmarks[end];
     if (!isSeen(a) || !isSeen(b)) continue; // never draw a bone we cannot see
-    drawLine(ctx, a.x * w, a.y * h, b.x * w, b.y * h);
+    for (const [width, color] of [[7, LINE_OUTLINE], [3, LINE_COLOR]]) {
+      ctx.beginPath();
+      ctx.moveTo(a.x * w, a.y * h);
+      ctx.lineTo(b.x * w, b.y * h);
+      ctx.lineWidth = width;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    }
   }
   for (const p of landmarks) {
-    if (isSeen(p)) drawDot(ctx, p.x * w, p.y * h);
+    if (!isSeen(p)) continue;
+    ctx.beginPath();
+    ctx.arc(p.x * w, p.y * h, 5, 0, Math.PI * 2);
+    ctx.fillStyle = LINE_COLOR;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = LINE_OUTLINE;
+    ctx.stroke();
   }
-}
-
-// A thick dark line with a thinner white line on top, so it shows on any background.
-function drawLine(ctx, x1, y1, x2, y2) {
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = LINE_OUTLINE;
-  ctx.stroke();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = LINE_COLOR;
-  ctx.stroke();
-}
-
-function drawDot(ctx, x, y) {
-  ctx.beginPath();
-  ctx.arc(x, y, 5, 0, Math.PI * 2);
-  ctx.fillStyle = LINE_COLOR;
-  ctx.fill();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = LINE_OUTLINE;
-  ctx.stroke();
 }

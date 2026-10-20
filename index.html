@@ -7,8 +7,7 @@
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-
-  <header>
+  <header class="no-print">
     <div class="header-row">
       <h1>CuffCheck</h1>
       <!-- Text size. Keyboard: Ctrl/Cmd + and Ctrl/Cmd - do the same. -->
@@ -17,80 +16,131 @@
         <button type="button" id="text-larger" aria-label="Larger text">A+</button>
       </div>
     </div>
-    <p class="tagline">Checks your blood pressure technique with the camera.</p>
+    <nav class="tabs">
+      <button type="button" data-screen="check">Check</button>
+      <button type="button" data-screen="history">My readings</button>
+      <button type="button" data-screen="why">Why it matters</button>
+    </nav>
   </header>
 
-  <!-- One page. Later milestones add the readings, report and "why" sections. -->
+  <!-- One page. Each screen is a <section>; main.js shows one at a time. -->
   <main>
-    <section id="camera-section">
+    <section id="screen-check" class="screen">
+      <p id="demo-banner" class="demo-banner" hidden>DEMO MODE: rest shortened to 30 seconds. For filming only.</p>
 
-      <!-- The video and the canvas sit on top of each other inside .stage.
-           The canvas is where the skeleton is drawn. -->
+      <details id="setup" class="setup" open>
+        <summary>Setup</summary>
+        <fieldset class="choice">
+          <legend>Which camera?</legend>
+          <label><input type="radio" name="camera" value="environment" checked> Back camera</label>
+          <label><input type="radio" name="camera" value="user"> Front camera</label>
+        </fieldset>
+        <fieldset class="choice">
+          <legend>Which arm wears the cuff?</legend>
+          <label><input type="radio" name="arm" value="left" checked> Left arm</label>
+          <label><input type="radio" name="arm" value="right"> Right arm</label>
+        </fieldset>
+        <fieldset class="choice">
+          <legend>Options</legend>
+          <label><input type="checkbox" id="opt-speech" checked> Speak the coaching messages</label>
+          <label><input type="checkbox" id="opt-mic" checked> Listen for talking with the microphone (nothing is recorded)</label>
+          <label><input type="checkbox" id="opt-numbers"> Show numbers for tuning</label>
+          <label><input type="checkbox" id="opt-demo"> Demo mode (30 s rest)</label>
+        </fieldset>
+      </details>
+
+      <button id="start-button" type="button">Start camera</button>
+      <p id="status" class="status" aria-live="polite">Tap Start camera. Nothing is recorded or uploaded.</p>
+
+      <!-- The video and the skeleton canvas sit on top of each other. -->
       <div class="stage" id="stage">
         <video id="video" playsinline muted autoplay></video>
         <canvas id="overlay"></canvas>
       </div>
 
-      <fieldset class="choice">
-        <legend>Which camera?</legend>
-        <label><input type="radio" name="camera" value="environment" checked> Back camera</label>
-        <label><input type="radio" name="camera" value="user"> Front camera</label>
-      </fieldset>
+      <!-- The ONE coaching message at a time. -->
+      <p id="coach" class="coach">Prop the phone so it sees you from the side, then press Start camera.</p>
 
-      <fieldset class="choice">
-        <legend>Which arm wears the cuff?</legend>
-        <label><input type="radio" name="arm" value="left" checked> Left arm</label>
-        <label><input type="radio" name="arm" value="right"> Right arm</label>
-      </fieldset>
-
-      <button id="start-button" type="button">Start camera</button>
-
-      <p id="status" class="status" aria-live="polite">
-        Tap Start camera. Nothing is recorded or uploaded.
-      </p>
+      <div class="session-buttons">
+        <button id="session-button" type="button" disabled>Start check</button>
+        <button id="reading-button" type="button" hidden>My monitor is done: enter reading</button>
+        <button id="stop-button" type="button" class="secondary" hidden>Stop check</button>
+      </div>
 
       <h2>Checklist</h2>
-      <!-- One row per guideline. The dot is gray (can't see), green (pass) or
-           red (fix this). The word next to it says the same thing for anyone
-           who cannot tell the colors apart. -->
+      <!-- Dot: gray = can't see, green = OK, red = fix this. The word says the same. -->
       <ul id="checklist" class="checklist">
-        <li data-check="framing">
-          <span class="dot unseen"></span><span class="label">Whole body in the picture</span>
-          <span class="state">Can't see</span><span class="reason"></span>
-        </li>
-        <li data-check="seated">
-          <span class="dot unseen"></span><span class="label">Sitting upright</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="back">
-          <span class="dot unseen"></span><span class="label">Back against the chair</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="legs">
-          <span class="dot unseen"></span><span class="label">Legs uncrossed</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="feet">
-          <span class="dot unseen"></span><span class="label">Feet flat on the floor</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="arm">
-          <span class="dot unseen"></span><span class="label">Cuff at heart level</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="rest">
-          <span class="dot unseen"></span><span class="label">Rested 5 minutes</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
-        <li data-check="talking">
-          <span class="dot unseen"></span><span class="label">Not talking</span>
-          <span class="state">Not built yet</span><span class="reason"></span>
-        </li>
+        <li data-check="framing"><span class="dot unseen"></span><span>Whole body in the picture</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="seated"><span class="dot unseen"></span><span>Sitting upright</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="back"><span class="dot unseen"></span><span>Back against the chair</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="legs"><span class="dot unseen"></span><span>Legs uncrossed</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="feet"><span class="dot unseen"></span><span>Feet flat on the floor</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="arm"><span class="dot unseen"></span><span>Cuff at heart level</span><span class="state">Can't see</span><span class="reason"></span></li>
+        <li data-check="rest"><span class="dot unseen"></span><span>Rested 5 minutes</span><span class="state">Not started</span><span class="reason"></span></li>
+        <li data-check="talking"><span class="dot unseen"></span><span>Not talking</span><span class="state">Can't see</span><span class="reason"></span></li>
       </ul>
+      <p id="numbers" class="numbers" hidden></p>
+    </section>
 
-      <!-- Stays disabled until the framing check passes. -->
-      <button id="session-button" type="button" disabled>Start check</button>
+    <section id="screen-reading" class="screen" hidden>
+      <h2>Enter your reading</h2>
+      <p id="verified-preview" class="verified-preview"></p>
+      <form id="reading-form" novalidate>
+        <label for="systolic">Systolic (top number)</label>
+        <input id="systolic" type="number" inputmode="numeric" min="60" max="260">
+        <label for="diastolic">Diastolic (bottom number)</label>
+        <input id="diastolic" type="number" inputmode="numeric" min="30" max="160">
+        <label for="pulse">Pulse</label>
+        <input id="pulse" type="number" inputmode="numeric" min="30" max="220">
+        <p id="form-error" class="form-error" role="alert"></p>
+        <button type="submit">Save reading</button>
+        <button type="button" id="cancel-reading" class="secondary">Cancel</button>
+      </form>
+    </section>
 
+    <section id="screen-safety" class="screen safety" hidden>
+      <h2>This reading is very high</h2>
+      <p class="big">Rest 5 minutes and measure again. If it's still this high, or you have chest pain, shortness of breath, back pain, numbness, weakness, vision changes or trouble speaking, call 911.</p>
+      <a class="button" href="https://www.google.com/maps/search/urgent+care+near+me" target="_blank" rel="noopener noreferrer">Find care near me</a>
+      <button type="button" data-screen="history" class="secondary">Go to my readings</button>
+    </section>
+
+    <section id="screen-history" class="screen" hidden>
+      <h2>My readings</h2>
+      <p id="high-note" class="note" hidden>This reading is 130/80 or higher. Consider sharing your CuffCheck report with your doctor.</p>
+      <ul id="history-list" class="history"></ul>
+      <button id="report-button" type="button">View report</button>
+      <button id="manual-button" type="button" class="secondary">Add a reading without the camera check</button>
+      <button id="export-button" type="button" class="secondary">Export session results</button>
+      <p id="export-status" class="status" aria-live="polite"></p>
+    </section>
+
+    <section id="screen-report" class="screen" hidden>
+      <div id="report-content" class="report"></div>
+      <button id="print-button" type="button" class="no-print">Print or save as PDF</button>
+      <button type="button" data-screen="history" class="secondary no-print">Back</button>
+    </section>
+
+    <section id="screen-why" class="screen" hidden>
+      <h2>Why technique matters</h2>
+      <article class="card">
+        <p class="big">Only 3% of patients measured their blood pressure at home without a single error.</p>
+        <p class="source">Source: Nessler K, et al. The quality of patients' self-blood pressure measurements: a cross-sectional study. BMC Cardiovascular Disorders 21, 539 (2021). <a href="https://doi.org/10.1186/s12872-021-02351-5" target="_blank" rel="noopener noreferrer">doi.org/10.1186/s12872-021-02351-5</a></p>
+      </article>
+      <article class="card">
+        <p class="big">An arm hanging at your side raised the top number by about 7 mmHg (6.5 mmHg on average).</p>
+        <p class="source">Source: Liu H, et al. Arm Position and Blood Pressure Readings: The ARMS Crossover Randomized Clinical Trial. JAMA Internal Medicine 184(12), 2024. <a href="https://doi.org/10.1001/jamainternmed.2024.5213" target="_blank" rel="noopener noreferrer">doi.org/10.1001/jamainternmed.2024.5213</a></p>
+      </article>
+      <article class="card">
+        <p class="big">Wrong readings can lead to wrong medication changes, including medicine a patient did not need.</p>
+        <p class="source">Source: Nessler K, et al. (2021), discussion section, same article as above.</p>
+      </article>
+
+      <h2>About CuffCheck</h2>
+      <p>CuffCheck checks measurement technique. It does not measure blood pressure, does not diagnose, and does not give medical advice. Your own cuff measures; your clinician makes every treatment decision.</p>
+      <p><strong>Privacy:</strong> all video processing happens in your browser. No video, images or sound are ever recorded, uploaded or saved. Only pass/fail results and the numbers you type are stored, on this device.</p>
+      <p><strong>Dataset credit:</strong> the posture model was trained on the MultiPosture dataset, Zenodo record 14230872, CC BY 4.0 (Carneros-Prado et al.).</p>
+      <p>Pose tracking by Google MediaPipe (Apache 2.0). Built by two high school students for the 2026 Congressional App Challenge.</p>
     </section>
   </main>
 

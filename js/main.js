@@ -1,113 +1,162 @@
-// main.js - connects the buttons on the page to camera.js and engine.js,
-// updates the checklist, and handles the text-size controls.
+// main.js - connects the page to the other modules: screen switching, the
+// buttons, the checklist, the coaching message and the text-size controls.
 
-import { startCamera, loadPoseModel, startTracking, stopTracking } from "./camera.js";
-import { runChecks, resetSmoothing, isReadyToStart } from "./engine.js";
+import { startCamera, loadModels, startTracking, stopTracking, startMicrophone, stopMicrophone } from "./camera.js";
+import { runChecks, resetEngine, isReadyToStart, startSession, stopSession, finishReading, getPhase } from "./engine.js";
+import { pickMessage, createSpeaker, speakAloud, LINES } from "./coach.js";
+import { initReadings, openReadingForm, renderHistory } from "./readings.js";
+import { startLog, logResults, downloadLog } from "./sessionLog.js";
+import { loadPostureModel } from "./model.js";
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("overlay");
-const stage = document.getElementById("stage");
-const startButton = document.getElementById("start-button");
-const sessionButton = document.getElementById("session-button");
-const statusLine = document.getElementById("status");
-
-let cameraOn = false;      // true while the camera and the draw loop are running
-let sessionStarted = false; // true after the user presses Start check
+const $ = (id) => document.getElementById(id);
+const speaker = createSpeaker(speakAloud);
+let cameraOn = false;
 
 function setStatus(text) {
-  statusLine.textContent = text;
+  $("status").textContent = text;
 }
 
-// Reads a radio group, e.g. radioValue("camera") -> "environment" or "user".
+// Reads a radio group, e.g. radioValue("arm") -> "left" or "right".
 function radioValue(name) {
   return document.querySelector(`input[name="${name}"]:checked`).value;
 }
 
+// ---- Screens: show one <section class="screen"> and hide the rest ----
+
+function showScreen(name) {
+  for (const screen of document.querySelectorAll(".screen")) screen.hidden = screen.id !== "screen-" + name;
+  for (const tab of document.querySelectorAll(".tabs button")) {
+    tab.setAttribute("aria-current", tab.dataset.screen === name ? "page" : "false");
+  }
+  if (name === "history") renderHistory();
+  window.scrollTo(0, 0);
+}
+
 // ---- Camera ----
 
-// Pressing Start (again) also switches cameras if the choice changed.
-async function handleStart() {
-  startButton.disabled = true; // no double taps while loading
+// Pressing Start camera (again) also switches cameras if the choice changed.
+async function handleStartCamera() {
+  $("start-button").disabled = true;
   const facing = radioValue("camera");
-  stage.classList.toggle("mirrored", facing === "user");
+  $("stage").classList.toggle("mirrored", facing === "user");
   try {
-    setStatus("Loading the pose model and starting the camera. This can take a few seconds.");
-    // Both can happen at the same time: the model downloads while the
-    // permission prompt is on screen.
-    await Promise.all([loadPoseModel(), startCamera(video, facing)]);
-    resetSmoothing();
-    startTracking(video, canvas, handleLandmarks);
+    setStatus("Loading the models and starting the camera. This can take a few seconds.");
+    await Promise.all([loadModels(), startCamera($("video"), facing)]);
+    resetEngine();
+    startTracking($("video"), $("overlay"), handleFrame);
     cameraOn = true;
-    setStatus("Camera on. Sit so your whole body is in the picture.");
+    setStatus("Camera on. Sit so your whole body is in the picture, seen from the side.");
   } catch (err) {
     console.error(err);
     setStatus(plainError(err));
   }
-  startButton.disabled = false;
+  $("start-button").disabled = false;
 }
 
-// Turns a browser error into a sentence a person can act on.
 function plainError(err) {
-  if (err.name === "NotAllowedError") {
-    return "Camera permission was denied. Allow the camera in your browser settings and try again.";
-  }
-  if (err.name === "NotFoundError" || err.name === "OverconstrainedError") {
-    return "No camera was found. Try the other camera choice.";
-  }
+  if (err.name === "NotAllowedError") return "Camera permission was denied. Allow the camera in your browser settings and try again.";
+  if (err.name === "NotFoundError" || err.name === "OverconstrainedError") return "No camera was found. Try the other camera choice.";
   return "Something went wrong: " + err.message;
 }
 
-// Called by camera.js on every new frame with the 33 landmarks (or null).
-function handleLandmarks(landmarks) {
-  const results = runChecks(landmarks, { cuffArm: radioValue("arm") });
+// Called by camera.js on every new frame.
+function handleFrame(frame) {
+  const now = Date.now();
+  const results = runChecks(frame, { cuffArm: radioValue("arm") }, now);
+  const phase = getPhase();
   updateChecklist(results);
-  if (!sessionStarted) sessionButton.disabled = !isReadyToStart(results);
+  showCoach(results, phase, now);
+  if (phase !== "setup") logResults(results, phase, now);
+  if ($("opt-numbers").checked) showNumbers(results);
+  updateButtons(phase, results);
 }
 
-// ---- Checklist ----
+// ---- Check session ----
+
+async function handleStartCheck() {
+  const demo = $("opt-demo").checked;
+  startSession(demo);
+  speaker.reset();
+  if ($("opt-speech").checked) speakAloud(LINES.start); // speaking inside the tap unlocks speech on iPhone
+  startLog({ cuffArm: radioValue("arm"), camera: radioValue("camera"), demoMode: demo, microphone: $("opt-mic").checked });
+  $("setup").open = false;
+  if ($("opt-mic").checked) {
+    try {
+      await startMicrophone();
+    } catch (err) {
+      console.warn(err);
+      setStatus("Microphone not available. Talking is checked by watching your mouth only.");
+    }
+  }
+}
+
+function handleEnterReading() {
+  const result = finishReading(Date.now());
+  stopMicrophone();
+  openReadingForm(result);
+}
+
+function handleStopCheck() {
+  stopSession();
+  stopMicrophone();
+  $("setup").open = true;
+}
+
+// Shows only the buttons that make sense right now.
+function updateButtons(phase, results) {
+  const inSession = phase !== "setup";
+  $("session-button").hidden = inSession;
+  $("session-button").disabled = !isReadyToStart(results);
+  $("reading-button").hidden = !inSession;
+  $("stop-button").hidden = !inSession;
+}
+
+// ---- Checklist, coach and numbers ----
 
 const STATE_WORDS = { pass: "OK", fail: "Fix this", unseen: "Can't see" };
-
-// Finds the dot, state word and reason text for each row, once.
 const rows = {};
 for (const li of document.querySelectorAll("#checklist li")) {
-  rows[li.dataset.check] = {
-    dot: li.querySelector(".dot"),
-    state: li.querySelector(".state"),
-    reason: li.querySelector(".reason"),
-    last: "",
-  };
+  rows[li.dataset.check] = { dot: li.querySelector(".dot"), state: li.querySelector(".state"), reason: li.querySelector(".reason"), last: "" };
 }
 
-// Writes each result into its row, but only when something changed, so the
-// page is not redrawn 30 times a second for nothing.
+// Writes each result into its row, but only when something changed.
 function updateChecklist(results) {
   for (const [id, result] of Object.entries(results)) {
     const row = rows[id];
-    if (!row) continue;
-    const key = result.status + "|" + result.reason;
-    if (key === row.last) continue;
+    const word = result.word || STATE_WORDS[result.status];
+    const key = result.status + "|" + word + "|" + result.reason;
+    if (!row || key === row.last) continue;
     row.last = key;
     row.dot.className = "dot " + result.status;
-    row.state.textContent = STATE_WORDS[result.status];
+    row.state.textContent = word;
     row.reason.textContent = result.reason;
   }
 }
 
-function handleSessionStart() {
-  sessionStarted = true;
-  sessionButton.disabled = true;
-  setStatus("Check started. Keep your whole body in the picture.");
+let lastCoachText = "";
+function showCoach(results, phase, now) {
+  const message = pickMessage(results, phase);
+  if (message.text !== lastCoachText) {
+    $("coach").textContent = message.text;
+    lastCoachText = message.text;
+  }
+  if ($("opt-speech").checked) speaker.offer(message, now);
+}
+
+// The numbers behind each decision, for tuning thresholds.
+function showNumbers(results) {
+  const parts = Object.entries(results).map(([id, r]) => id + " " + (r.value === null ? "-" : r.value));
+  $("numbers").textContent = parts.join("  |  ");
 }
 
 // ---- Text size ----
 
-const TEXT_SCALE_MIN = 0.8;  // TEAM TUNES THIS
-const TEXT_SCALE_MAX = 1.6;  // TEAM TUNES THIS
+const TEXT_SCALE_MIN = 0.8; // TEAM TUNES THIS
+const TEXT_SCALE_MAX = 1.6; // TEAM TUNES THIS
 const TEXT_SCALE_STEP = 0.1;
 let textScale = 1;
 
-// Every size on the page is in rem, so changing one CSS variable scales everything.
+// Every size on the page is in rem, so one CSS variable scales everything.
 function setTextScale(next) {
   textScale = Math.min(TEXT_SCALE_MAX, Math.max(TEXT_SCALE_MIN, Math.round(next * 10) / 10));
   document.documentElement.style.setProperty("--text-scale", textScale);
@@ -126,17 +175,32 @@ function handleTextKeys(event) {
 
 // ---- Wiring ----
 
-startButton.addEventListener("click", handleStart);
-sessionButton.addEventListener("click", handleSessionStart);
-document.getElementById("text-larger").addEventListener("click", () => setTextScale(textScale + TEXT_SCALE_STEP));
-document.getElementById("text-smaller").addEventListener("click", () => setTextScale(textScale - TEXT_SCALE_STEP));
+$("start-button").addEventListener("click", handleStartCamera);
+$("session-button").addEventListener("click", handleStartCheck);
+$("reading-button").addEventListener("click", handleEnterReading);
+$("stop-button").addEventListener("click", handleStopCheck);
+$("text-larger").addEventListener("click", () => setTextScale(textScale + TEXT_SCALE_STEP));
+$("text-smaller").addEventListener("click", () => setTextScale(textScale - TEXT_SCALE_STEP));
+$("opt-demo").addEventListener("change", () => { $("demo-banner").hidden = !$("opt-demo").checked; });
+$("opt-numbers").addEventListener("change", () => { $("numbers").hidden = !$("opt-numbers").checked; });
+$("export-button").addEventListener("click", () => {
+  $("export-status").textContent = downloadLog() ? "Downloaded." : "No session yet. Run a check first.";
+});
 document.addEventListener("keydown", handleTextKeys);
+for (const button of document.querySelectorAll("[data-screen]")) {
+  button.addEventListener("click", () => showScreen(button.dataset.screen));
+}
 
-// When the user switches apps, stop the camera to save battery and privacy.
+// When the user switches apps, stop the camera and mic to save battery and privacy.
 document.addEventListener("visibilitychange", () => {
   if (document.hidden && cameraOn) {
     cameraOn = false;
     stopTracking();
+    handleStopCheck();
     setStatus("Camera paused. Tap Start camera to continue.");
   }
 });
+
+initReadings(showScreen);
+loadPostureModel().catch((err) => console.warn("Posture model not loaded; rules only.", err));
+showScreen("check");
