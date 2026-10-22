@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { POINT } from "../js/checks.js";
 import { runChecks, resetEngine, startSession, finishReading, getPhase, CHECK_IDS } from "../js/engine.js";
 import { setPostureModel } from "../js/model.js";
-import { pickMessage, createSpeaker, LINES, ANY_LINE_GAP_MS } from "../js/coach.js";
+import { pickMessage, createSpeaker, LINES, TIPS, ANY_LINE_GAP_MS, SAME_LINE_GAP_MS } from "../js/coach.js";
 import { validateReading, classifyReading, summarize } from "../js/readings.js";
 import { startLog, logResults, attachReading, getLog } from "../js/sessionLog.js";
 
@@ -117,7 +117,8 @@ test("coach: silent in setup, first problem first, rest line once, then press st
   const armAndTalk = { ...all("pass"), arm: { status: "fail", reason: "Raise your arm" }, talking: { status: "fail", reason: "Quiet" } };
   assert.equal(pickMessage(armAndTalk, "resting").line, "Raise your arm");
   const onlyRest = { ...all("pass"), rest: { status: "fail", reason: "Keep resting quietly: 4:00 left." } };
-  assert.deepEqual(pickMessage(onlyRest, "resting"), { text: "Keep resting quietly: 4:00 left.", line: LINES.resting, once: true });
+  assert.deepEqual(pickMessage(onlyRest, "resting"), { id: "rest", text: "Keep resting quietly: 4:00 left.", line: LINES.resting, once: true });
+  assert.equal(pickMessage(armAndTalk, "resting").tip, TIPS.arm);
   assert.equal(pickMessage(all("pass"), "measuring").line, LINES.ready);
 });
 
@@ -131,6 +132,16 @@ test("speaker: never within 3 s, never repeats a once-line, waits before repeati
   assert.equal(speaker.offer({ line: "R", once: true }, 20000), true);
   assert.equal(speaker.offer({ line: "R", once: true }, 60000), false);
   assert.deepEqual(said, ["A", "B", "R"]);
+});
+
+test("speaker: a repeated problem adds the how-to tip; fixing it earns a 'Good.'", () => {
+  const said = [];
+  const speaker = createSpeaker((line) => said.push(line));
+  const back = { id: "back", line: "Sit back.", tip: "Shoulder blades on the chair." };
+  speaker.offer(back, 0);
+  speaker.offer(back, SAME_LINE_GAP_MS);
+  speaker.offer({ id: "arm", line: "Raise your arm.", tip: "Use a pillow." }, SAME_LINE_GAP_MS * 2);
+  assert.deepEqual(said, ["Sit back.", "Sit back. Shoulder blades on the chair.", "Good. Raise your arm."]);
 });
 
 test("readings: validation catches blanks, impossible numbers and swapped numbers", () => {

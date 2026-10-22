@@ -9,11 +9,16 @@
 
 export const MIN_VISIBILITY = 0.5;       // TEAM TUNES THIS - a point below this counts as "not seen"
 export const HIP_ANGLE_MIN = 70;         // TEAM TUNES THIS - degrees at the hip (shoulder-hip-knee)
-export const HIP_ANGLE_MAX = 120;        // TEAM TUNES THIS
-export const BACK_LEAN_LIMIT = 20;       // TEAM TUNES THIS - degrees from vertical the trunk may lean
-export const BACK_STEADY_LIMIT = 4;      // TEAM TUNES THIS - degrees of wobble allowed
-export const BACK_MIN_SAMPLES = 30;      // TEAM TUNES THIS - frames needed before judging (about 1.5 s)
-export const MODEL_UPRIGHT_MIN = 0.5;    // TEAM TUNES THIS - model must be this sure the trunk is upright
+export const HIP_ANGLE_MAX = 140;        // TEAM TUNES THIS - leaning back on a chair opens the hip past 120
+export const BACK_FORWARD_LIMIT = 15;    // TEAM TUNES THIS - degrees forward that means the back left the chair
+export const BACK_RECLINE_LIMIT = 40;    // TEAM TUNES THIS - degrees back that is too far reclined
+export const BACK_MIN_SAMPLES = 15;      // TEAM TUNES THIS - frames needed before judging (under 1 s)
+export const MODEL_UPRIGHT_MIN = 0.15;   // TEAM TUNES THIS - below this the model is sure the trunk is NOT upright
+export const FACING_SHOULDER_RATIO = 0.7; // TEAM TUNES THIS - shoulders wider than this (torso lengths) = facing the camera
+export const FACING_THIGH_RATIO = 0.4;   // TEAM TUNES THIS - thighs shorter than this (torso lengths) = pointing at the camera
+export const TOO_FAR_TORSO = 0.12;       // TEAM TUNES THIS - torso shorter than this share of the picture height = too far
+export const TOO_CLOSE_TORSO = 0.45;     // TEAM TUNES THIS - torso taller than this share = too close
+export const EDGE_MARGIN = 0.02;         // a hidden point this near the edge counts as cut off
 export const MODEL_CROSSED_MAX = 0.5;    // TEAM TUNES THIS - above this the model says legs are crossed
 export const CROSS_MIN_GAP = 0.03;       // TEAM TUNES THIS - closer than this = can't tell left from right
 export const FEET_MIN_DROP = 0.05;       // TEAM TUNES THIS - an ankle must sit this far below its knee
@@ -52,24 +57,109 @@ const pass = (reason, value = null) => ({ status: "pass", reason, value });
 const fail = (reason, value = null) => ({ status: "fail", reason, value });
 const unseen = (reason) => ({ status: "unseen", reason, value: null });
 
-// ---- Framing: shoulders, hips, cuffed elbow and knees must all be visible ----
-export function checkFraming(landmarks, cuffArm) {
-  if (!landmarks) return unseen("Nobody is in the picture yet.");
-  const cuffElbow = cuffArm === "right" ? POINT.RIGHT_ELBOW : POINT.LEFT_ELBOW;
+// ---- Framing: the right distance, a side view with the cuffed arm toward the
+// camera, and shoulders, hips, cuffed elbow, knees and a foot all visible.
+// Each failure says exactly what to move and which way.
+// aspect = picture width / height, so x runs from 0 to aspect.
+export function checkFraming(landmarks, cuffArm, aspect = 4 / 3) {
+  // TEAM TUNES THIS wording (all messages below)
+  if (!landmarks) return unseen("I can't see anyone yet. Sit in the chair with your side to the camera, about 2 meters (6 feet) away.");
+  const torso = torsoLength(landmarks);
+  const size = torso === null ? null : round2(torso);
+  if (torso !== null && torso < TOO_FAR_TORSO) {
+    return fail("You're too far from the camera. Move it about 1 meter (3 feet) closer to you.", size);
+  }
+  if (torso !== null && torso > TOO_CLOSE_TORSO) {
+    return fail("You're too close to the camera. Move it about 1 meter (3 feet) farther away.", size);
+  }
+  if (facesCamera(landmarks)) {
+    return fail(`You're facing the camera. Turn your chair sideways so your ${cuffArm} side, with the cuff, faces the camera.`, size);
+  }
+
+  const right = cuffArm === "right";
+  const cuffElbow = right ? POINT.RIGHT_ELBOW : POINT.LEFT_ELBOW;
   const needed = [
-    ["shoulders", [POINT.LEFT_SHOULDER, POINT.RIGHT_SHOULDER]],
-    ["hips", [POINT.LEFT_HIP, POINT.RIGHT_HIP]],
-    ["cuff-arm elbow", [cuffElbow]],
-    ["knees", [POINT.LEFT_KNEE, POINT.RIGHT_KNEE]],
+    ["shoulders", [POINT.LEFT_SHOULDER, POINT.RIGHT_SHOULDER], "all"],
+    ["hips", [POINT.LEFT_HIP, POINT.RIGHT_HIP], "all"],
+    ["cuffed elbow", [cuffElbow], "all"],
+    ["knees", [POINT.LEFT_KNEE, POINT.RIGHT_KNEE], "all"],
+    ["feet", [POINT.LEFT_ANKLE, POINT.RIGHT_ANKLE], "any"],
   ];
-  const missing = needed.filter(([, ids]) => !ids.every((i) => seen(landmarks, i))).map(([name]) => name);
-  if (missing.length === 0) return pass("Whole body is in the picture.");
-  // TEAM TUNES THIS wording
-  return fail("Move back or tilt the camera so I can see your " + joinWords(missing) + ".");
+  const missingParts = needed.filter(([, ids, rule]) =>
+    rule === "all" ? !ids.every((i) => seen(landmarks, i)) : !ids.some((i) => seen(landmarks, i)));
+  if (missingParts.length === 0) return pass("Whole body is in the picture, seen from the side.", size);
+
+  const missing = missingParts.map(([name]) => name);
+  const missingIds = missingParts.flatMap(([, ids]) => ids);
+  if (missing.includes("cuffed elbow") && cuffArmIsFar(landmarks, right)) {
+    return fail(`Your cuffed arm is on the far side. Turn around so your ${cuffArm} arm faces the camera.`, size);
+  }
+  const edges = cutOffEdges(landmarks, missingIds, aspect);
+  if (edges.top && edges.bottom) {
+    return fail("You're too close to the camera. Move it about 1 meter (3 feet) farther away.", size);
+  }
+  if (edges.bottom) {
+    return fail("I can't see your " + joinWords(missing) + ". Tilt the camera down a little, or move it about half a meter (2 feet) back.", size);
+  }
+  if (edges.top) {
+    return fail("I can't see your " + joinWords(missing) + ". Tilt the camera up a little, or move it about half a meter (2 feet) back.", size);
+  }
+  if (edges.side) {
+    return fail("You're at the edge of the picture. Move the camera so you're in the middle.", size);
+  }
+  return fail("I can't see your " + joinWords(missing) + ". Make sure nothing, like a table, is blocking the camera's view of them.", size);
+}
+
+// Length of the shoulder-to-hip line, as a share of the picture height.
+// Uses whichever side is visible. null if neither side is.
+export function torsoLength(landmarks) {
+  const shoulder = seen(landmarks, POINT.LEFT_SHOULDER) || seen(landmarks, POINT.RIGHT_SHOULDER);
+  const hip = seen(landmarks, POINT.LEFT_HIP) || seen(landmarks, POINT.RIGHT_HIP);
+  if (!shoulder || !hip) return null;
+  return Math.hypot(hip.x - shoulder.x, hip.y - shoulder.y);
+}
+
+// True when the person faces the camera instead of showing their side: the
+// shoulders look wide, or the thighs point at the lens and look short.
+// The angle checks are meaningless from the front, so they stay "unseen".
+export function facesCamera(landmarks) {
+  const ls = seen(landmarks, POINT.LEFT_SHOULDER), rs = seen(landmarks, POINT.RIGHT_SHOULDER);
+  const lh = seen(landmarks, POINT.LEFT_HIP), rh = seen(landmarks, POINT.RIGHT_HIP);
+  if (!ls || !rs || !lh || !rh) return false;
+  const torso = Math.hypot((lh.x + rh.x - ls.x - rs.x) / 2, (lh.y + rh.y - ls.y - rs.y) / 2);
+  if (torso === 0) return false;
+  const thighs = [[lh, seen(landmarks, POINT.LEFT_KNEE)], [rh, seen(landmarks, POINT.RIGHT_KNEE)]]
+    .filter(([, knee]) => knee)
+    .map(([hip, knee]) => Math.hypot(knee.x - hip.x, knee.y - hip.y) / torso);
+  const shoulderWidth = Math.abs(ls.x - rs.x) / torso;
+  return shoulderWidth > FACING_SHOULDER_RATIO || (thighs.length > 0 && Math.max(...thighs) < FACING_THIGH_RATIO);
+}
+
+// True when the cuffed shoulder is farther from the camera than the other one
+// (MediaPipe's z: smaller = closer), i.e. the person sits the wrong way round.
+function cuffArmIsFar(landmarks, right) {
+  const cuff = landmarks[right ? POINT.RIGHT_SHOULDER : POINT.LEFT_SHOULDER];
+  const other = landmarks[right ? POINT.LEFT_SHOULDER : POINT.RIGHT_SHOULDER];
+  return Boolean(cuff && other) && typeof cuff.z === "number" && cuff.z > other.z;
+}
+
+// Which picture edges the hidden points fall past. MediaPipe still guesses
+// where a hidden point is, and for a cut-off body part that guess is off-screen.
+function cutOffEdges(landmarks, ids, aspect) {
+  const edges = { top: false, bottom: false, side: false };
+  for (const i of ids) {
+    const p = landmarks[i];
+    if (!p || isSeen(p)) continue;
+    if (p.y > 1 - EDGE_MARGIN) edges.bottom = true;
+    else if (p.y < EDGE_MARGIN) edges.top = true;
+    else if (p.x < EDGE_MARGIN || p.x > aspect - EDGE_MARGIN) edges.side = true;
+  }
+  return edges;
 }
 
 // ---- Seated upright: the shoulder-hip-knee angle is near a right angle ----
 export function checkSeatedUpright(landmarks) {
+  if (facesCamera(landmarks)) return unseen("Turn sideways so I can see how you're sitting.");
   const sides = [
     [POINT.LEFT_SHOULDER, POINT.LEFT_HIP, POINT.LEFT_KNEE],
     [POINT.RIGHT_SHOULDER, POINT.RIGHT_HIP, POINT.RIGHT_KNEE],
@@ -82,38 +172,55 @@ export function checkSeatedUpright(landmarks) {
   if (angles.length === 0) return unseen("I can't see your shoulder, hip and knee on one side.");
   const hipAngle = Math.round(average(angles));
   // TEAM TUNES THIS wording
-  if (hipAngle < HIP_ANGLE_MIN) return fail("You're bent forward. Sit up straight.", hipAngle);
-  if (hipAngle > HIP_ANGLE_MAX) return fail("You're slumped or reclining. Sit upright in the chair.", hipAngle);
+  if (hipAngle < HIP_ANGLE_MIN) return fail("You're bent forward. Sit up tall with your back against the chair.", hipAngle);
+  if (hipAngle > HIP_ANGLE_MAX) return fail("You're slumped down. Slide your hips all the way back in the seat and sit up.", hipAngle);
   return pass("Sitting upright.", hipAngle);
 }
 
-// ---- Back supported: trunk near vertical, steady for the last 10 s, and the
-// posture model (if loaded) agrees it is upright. leanAngles come from the engine.
+// ---- Back supported: over the last few seconds the trunk is not leaning
+// forward (away from the chair back) or reclined too far. leanAngles come from
+// the engine; the median ignores the odd jittery frame.
+// A back resting on a chair leans BACK a little, and that must pass. The
+// posture model was trained to call any lean, back included, "not upright",
+// so it only gets a say when the trunk is not leaning back.
 export function checkBackSupported(leanAngles, uprightChance = null) {
   if (leanAngles.length < BACK_MIN_SAMPLES) return unseen("Hold still for a moment.");
-  const mean = average(leanAngles);
-  const wobble = spread(leanAngles);
+  const lean = Math.round(median(leanAngles));
   // TEAM TUNES THIS wording
-  if (mean > BACK_LEAN_LIMIT) return fail("Sit back against the chair.", Math.round(mean));
-  if (wobble > BACK_STEADY_LIMIT) return fail("Keep your back still against the chair.", Math.round(mean));
-  if (uprightChance !== null && uprightChance < MODEL_UPRIGHT_MIN) {
-    return fail("Sit back against the chair.", round2(uprightChance));
+  if (lean > BACK_FORWARD_LIMIT) return fail("You're leaning forward. Sit back until your back touches the chair.", lean);
+  if (lean < -BACK_RECLINE_LIMIT) return fail("You're leaning too far back. Sit up a little, keeping your back on the chair.", lean);
+  if (uprightChance !== null && uprightChance < MODEL_UPRIGHT_MIN && lean >= 0) {
+    return fail("Sit up straight against the chair, without leaning forward or to the side.", round2(uprightChance));
   }
-  return pass("Back is steady against the chair.", Math.round(mean));
+  return pass("Back is resting against the chair.", lean);
 }
 
 // How far the hip-to-shoulder line leans from straight up, in degrees.
+// Positive = leaning forward (toward the knees), negative = leaning back.
+// Uses the side nearest the camera, which MediaPipe sees best; the hidden
+// far side is often a poor guess. null if it can't be measured.
 export function trunkLeanAngle(landmarks) {
-  const sides = [[POINT.LEFT_SHOULDER, POINT.LEFT_HIP], [POINT.RIGHT_SHOULDER, POINT.RIGHT_HIP]];
-  const angles = [];
-  for (const [s, h] of sides) {
+  if (!landmarks || facesCamera(landmarks)) return null;
+  const sides = [
+    [POINT.LEFT_SHOULDER, POINT.LEFT_HIP, POINT.LEFT_KNEE],
+    [POINT.RIGHT_SHOULDER, POINT.RIGHT_HIP, POINT.RIGHT_KNEE],
+  ];
+  let best = null;
+  for (const [s, h, k] of sides) {
     const shoulder = seen(landmarks, s), hip = seen(landmarks, h);
     if (!shoulder || !hip) continue;
-    const dx = shoulder.x - hip.x;
-    const dy = hip.y - shoulder.y; // positive when the shoulder is above the hip (y grows downward)
-    angles.push(Math.abs(Math.atan2(dx, dy)) * 180 / Math.PI);
+    const score = Math.min(shoulder.visibility, hip.visibility);
+    if (!best || score > best.score) best = { shoulder, hip, knee: seen(landmarks, k), score };
   }
-  return angles.length ? average(angles) : null;
+  if (!best) return null;
+  // "Forward" is the way the knees point; if no knee is seen, the way the nose points.
+  const knee = best.knee || seen(landmarks, POINT.LEFT_KNEE) || seen(landmarks, POINT.RIGHT_KNEE);
+  const nose = seen(landmarks, POINT.NOSE);
+  const ahead = knee ? knee.x - best.hip.x : nose ? nose.x - best.shoulder.x : 0;
+  if (ahead === 0) return null;
+  const dx = (best.shoulder.x - best.hip.x) * Math.sign(ahead);
+  const dy = best.hip.y - best.shoulder.y; // positive when the shoulder is above the hip (y grows downward)
+  return Math.atan2(dx, dy) * 180 / Math.PI;
 }
 
 // ---- Legs uncrossed: crossed legs swap left/right order between hips,
@@ -124,7 +231,7 @@ export function checkLegsUncrossed(landmarks, crossedChance = null) {
   const leftAnkle = seen(landmarks, POINT.LEFT_ANKLE), rightAnkle = seen(landmarks, POINT.RIGHT_ANKLE);
   const leftHip = seen(landmarks, POINT.LEFT_HIP), rightHip = seen(landmarks, POINT.RIGHT_HIP);
   if (!leftKnee || !rightKnee) return unseen("I can't see both knees.");
-  if (!leftAnkle || !rightAnkle) return unseen("I can't see both ankles.");
+  if (!leftAnkle || !rightAnkle) return unseen("I can't see both ankles. Turn your chair a little toward the camera.");
 
   const orders = [
     leftHip && rightHip ? sideOrder(leftHip, rightHip) : 0,
@@ -173,7 +280,9 @@ export function checkArmAtHeart(landmarks, cuffArm) {
   const elbow = seen(landmarks, right ? POINT.RIGHT_ELBOW : POINT.LEFT_ELBOW);
   const hip = seen(landmarks, right ? POINT.RIGHT_HIP : POINT.LEFT_HIP) ||
               seen(landmarks, right ? POINT.LEFT_HIP : POINT.RIGHT_HIP);
-  if (!shoulder || !elbow || !hip) return unseen("I can't see the shoulder and elbow of your cuffed arm.");
+  if (!shoulder || !elbow || !hip) {
+    return unseen(`I can't see your cuffed arm. Your ${right ? "right" : "left"} side should face the camera.`);
+  }
   const torso = Math.hypot(hip.x - shoulder.x, hip.y - shoulder.y);
   if (torso === 0) return unseen("I can't measure your torso.");
   const cuffY = shoulder.y + CUFF_RATIO * (elbow.y - shoulder.y);
@@ -260,6 +369,12 @@ function average(numbers) {
 function spread(numbers) {
   const mean = average(numbers);
   return Math.sqrt(average(numbers.map((n) => (n - mean) ** 2)));
+}
+
+function median(numbers) {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
 function round2(n) {

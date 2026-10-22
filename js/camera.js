@@ -82,7 +82,7 @@ async function withGpuOrCpu(create) {
 }
 
 // Runs the models on every new frame, draws the skeleton, and hands a frame
-// summary to onFrame: { landmarks, worldLandmarks, jawOpen, micLevel }.
+// summary to onFrame: { landmarks, worldLandmarks, jawOpen, micLevel, aspect }.
 export function startTracking(videoEl, canvasEl, onFrame) {
   if (animationId) cancelAnimationFrame(animationId); // never run two loops
   const ctx = canvasEl.getContext("2d");
@@ -108,6 +108,7 @@ export function startTracking(videoEl, canvasEl, onFrame) {
           worldLandmarks: pose.worldLandmarks[0] || null,
           jawOpen: lastJawOpen,
           micLevel: readMicLevel(),
+          aspect, // picture width / height, so the framing check knows where the edges are
         });
       } catch (err) {
         console.error("A model failed on this frame.", err); // one bad frame should not end the session

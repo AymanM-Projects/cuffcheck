@@ -7,6 +7,7 @@ import {
   POINT, checkFraming, checkSeatedUpright, checkBackSupported, checkLegsUncrossed,
   checkFeetFlat, checkArmAtHeart, checkRest, nextRestSeconds, motionAmount,
   checkNotTalking, trunkLeanAngle, angleAt, formatTime, STILL_LIMIT, MOVE_LIMIT,
+  facesCamera, torsoLength,
 } from "../js/checks.js";
 
 // A person sitting upright, seen from their left side. y grows downward.
@@ -54,6 +55,39 @@ test("framing: passes, names missing parts, respects the cuffed arm, unseen when
   assert.equal(checkFraming(null, "left").status, "unseen");
 });
 
+test("framing: too far, too close, facing the camera and wrong side each say what to do", () => {
+  const scale = (factor) => {
+    const body = sideViewBody();
+    for (const p of body) { p.x = 0.5 + (p.x - 0.5) * factor; p.y = 0.5 + (p.y - 0.5) * factor; }
+    return body;
+  };
+  assert.match(checkFraming(scale(0.4), "left").reason, /too far.*closer/);
+  assert.match(checkFraming(scale(2), "left").reason, /too close.*farther/);
+
+  const facing = sideViewBody({
+    [POINT.LEFT_SHOULDER]: { x: 0.62 }, [POINT.RIGHT_SHOULDER]: { x: 0.40 },
+    [POINT.LEFT_HIP]: { x: 0.58 }, [POINT.RIGHT_HIP]: { x: 0.44 },
+    [POINT.LEFT_KNEE]: { x: 0.58, y: 0.60 }, [POINT.RIGHT_KNEE]: { x: 0.44, y: 0.60 },
+  });
+  assert.equal(facesCamera(facing), true);
+  assert.equal(facesCamera(sideViewBody()), false);
+  assert.match(checkFraming(facing, "left").reason, /Turn your chair sideways so your left side/);
+  assert.equal(checkSeatedUpright(facing).status, "unseen", "angles mean nothing from the front");
+
+  const wrongSide = sideViewBody({ [POINT.LEFT_ELBOW]: hidden, [POINT.LEFT_SHOULDER]: { z: 0.2 }, [POINT.RIGHT_SHOULDER]: { z: -0.2 } });
+  assert.match(checkFraming(wrongSide, "left").reason, /far side.*left arm faces the camera/);
+});
+
+test("framing: a body cut off at the bottom says tilt down or move back", () => {
+  const cut = sideViewBody({
+    [POINT.LEFT_ANKLE]: { y: 1.1, visibility: 0.1 }, [POINT.RIGHT_ANKLE]: { y: 1.1, visibility: 0.1 },
+  });
+  const result = checkFraming(cut, "left");
+  assert.equal(result.status, "fail");
+  assert.match(result.reason, /feet.*Tilt the camera down/);
+  assert.ok(Math.abs(torsoLength(sideViewBody()) - 0.25) < 0.001);
+});
+
 test("seated: upright passes, bent forward and reclining fail, hidden is unseen", () => {
   assert.equal(checkSeatedUpright(sideViewBody()).status, "pass");
   const forward = sideViewBody({ [POINT.LEFT_SHOULDER]: { x: 0.72, y: 0.45 }, [POINT.RIGHT_SHOULDER]: { x: 0.74, y: 0.45 } });
@@ -64,20 +98,52 @@ test("seated: upright passes, bent forward and reclining fail, hidden is unseen"
   assert.equal(checkSeatedUpright(half).status, "unseen");
 });
 
-test("trunk lean: upright is about 0 degrees, leaning is more", () => {
-  assert.ok(trunkLeanAngle(sideViewBody()) < 1);
-  const leaning = sideViewBody({ [POINT.LEFT_SHOULDER]: { x: 0.65 }, [POINT.RIGHT_SHOULDER]: { x: 0.67 } });
-  assert.ok(trunkLeanAngle(leaning) > 25);
+test("trunk lean: upright is about 0, leaning forward is positive, leaning back is negative", () => {
+  assert.ok(Math.abs(trunkLeanAngle(sideViewBody())) < 1);
+  const forward = sideViewBody({ [POINT.LEFT_SHOULDER]: { x: 0.65 }, [POINT.RIGHT_SHOULDER]: { x: 0.67 } });
+  assert.ok(trunkLeanAngle(forward) > 25);
+  const back = sideViewBody({ [POINT.LEFT_SHOULDER]: { x: 0.40 }, [POINT.RIGHT_SHOULDER]: { x: 0.42 } });
+  assert.ok(trunkLeanAngle(back) < -15);
   assert.equal(trunkLeanAngle(null), null);
 });
 
-test("back: steady passes; leaning, wobbling or a model 'not upright' fails; too few samples is unseen", () => {
+test("trunk lean: works for a person facing the other way", () => {
+  // Mirror the body: knees now point to the left of the picture.
+  const mirrored = sideViewBody();
+  for (const p of mirrored) p.x = 1 - p.x;
+  const back = sideViewBody({ [POINT.LEFT_SHOULDER]: { x: 0.40 }, [POINT.RIGHT_SHOULDER]: { x: 0.42 } });
+  for (const p of back) p.x = 1 - p.x;
+  assert.ok(Math.abs(trunkLeanAngle(mirrored)) < 1);
+  assert.ok(trunkLeanAngle(back) < -15);
+});
+
+test("back: upright or leaning back on the chair passes; leaning forward or far back fails", () => {
   assert.equal(checkBackSupported(Array(40).fill(5)).status, "pass");
+  assert.equal(checkBackSupported(Array(40).fill(-20)).status, "pass", "resting back on the chair is correct");
   assert.equal(checkBackSupported(Array(40).fill(30)).status, "fail");
-  assert.equal(checkBackSupported(Array.from({ length: 40 }, (_, i) => (i % 2 ? 0 : 15))).status, "fail");
-  assert.equal(checkBackSupported(Array(40).fill(5), 0.2).status, "fail");
-  assert.equal(checkBackSupported(Array(40).fill(5), 0.9).status, "pass");
+  assert.match(checkBackSupported(Array(40).fill(30)).reason, /leaning forward/);
+  assert.equal(checkBackSupported(Array(40).fill(-50)).status, "fail");
   assert.equal(checkBackSupported([5, 5, 5]).status, "unseen");
+});
+
+test("back: a few jittery frames do not fail it", () => {
+  const jitter = Array.from({ length: 40 }, (_, i) => (i % 5 === 0 ? 40 : -10));
+  assert.equal(checkBackSupported(jitter).status, "pass");
+});
+
+test("back: the model only counts when the trunk is not leaning back", () => {
+  assert.equal(checkBackSupported(Array(40).fill(5), 0.1).status, "fail");
+  assert.equal(checkBackSupported(Array(40).fill(5), 0.3).status, "pass", "an unsure model is ignored");
+  assert.equal(checkBackSupported(Array(40).fill(-15), 0.05).status, "pass", "model calls leaning back 'not upright'");
+});
+
+test("seated: reclining against the chair back passes", () => {
+  // Shoulders 20 degrees behind the hips, thighs sloping a little down.
+  const reclined = sideViewBody({
+    [POINT.LEFT_SHOULDER]: { x: 0.415, y: 0.315 }, [POINT.RIGHT_SHOULDER]: { x: 0.435, y: 0.315 },
+    [POINT.LEFT_KNEE]: { x: 0.70, y: 0.62 }, [POINT.RIGHT_KNEE]: { x: 0.72, y: 0.62 },
+  });
+  assert.equal(checkSeatedUpright(reclined).status, "pass");
 });
 
 test("legs: front view uncrossed passes; ankles or knees swapped fails", () => {

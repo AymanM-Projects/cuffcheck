@@ -13,7 +13,7 @@ import {
 import { postureChances } from "./model.js";
 
 export const SMOOTH_FRAMES = 20;          // TEAM TUNES THIS - about 1 second of frames
-export const BACK_WINDOW_MS = 10000;      // TEAM TUNES THIS - trunk-lean history for the back check
+export const BACK_WINDOW_MS = 4000;       // TEAM TUNES THIS - trunk-lean history for the back check
 export const MOTION_WINDOW_MS = 1000;     // TEAM TUNES THIS - movement is measured over this time
 export const TALK_WINDOW_MS = 2000;       // TEAM TUNES THIS - mouth and mic history for talking
 export const REST_SECONDS = 300;          // 5 minutes, from the guidelines
@@ -39,7 +39,7 @@ function freshState() {
 }
 
 // Runs all checks on one frame. frame = { landmarks, worldLandmarks, jawOpen,
-// micLevel }. now is a clock in ms; tests pass their own so they do not wait.
+// micLevel, aspect }. now is a clock in ms; tests pass their own so they do not wait.
 export function runChecks(frame, settings, now = Date.now()) {
   const landmarks = frame.landmarks;
   remember(state.lean, trunkLeanAngle(landmarks), now, BACK_WINDOW_MS);
@@ -52,7 +52,7 @@ export function runChecks(frame, settings, now = Date.now()) {
   const chances = postureChances(frame.worldLandmarks);
 
   const raw = {
-    framing: checkFraming(landmarks, settings.cuffArm),
+    framing: checkFraming(landmarks, settings.cuffArm, frame.aspect),
     seated: checkSeatedUpright(landmarks),
     back: checkBackSupported(values(state.lean), chances.upright),
     legs: checkLegsUncrossed(landmarks, chances.crossed),

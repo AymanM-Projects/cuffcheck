@@ -45,7 +45,7 @@ async function handleStartCamera() {
     resetEngine();
     startTracking($("video"), $("overlay"), handleFrame);
     cameraOn = true;
-    setStatus("Camera on. Sit so your whole body is in the picture, seen from the side.");
+    setStatus("Camera on. Sit with your cuffed side toward the camera, about 2 meters (6 feet) away, so your whole body is in the picture.");
   } catch (err) {
     console.error(err);
     setStatus(plainError(err));
@@ -152,6 +152,8 @@ function showCoach(results, phase, now) {
   const message = pickMessage(results, phase);
   if (message.text !== lastCoachText) {
     $("coach").textContent = message.text;
+    $("coach-tip").textContent = message.tip || "";
+    $("coach-tip").hidden = !message.tip;
     lastCoachText = message.text;
   }
   if ($("opt-speech").checked) speaker.offer(message, now);
