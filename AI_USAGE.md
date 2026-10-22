@@ -106,3 +106,19 @@ We asked Claude to make the app more visually appealing while keeping our design
 _(Fill in: did you keep teal or pick another accent, wording changes, what your testers said about the new look.)_
 
 **Fix found while re-testing (Oct 20, 2026):** exported session files were named with UTC time instead of local time. Claude added `localStamp()` in `js/sessionLog.js` so the file name matches the phone's clock.
+
+## Fixes from real testing (Oct 21-22, 2026)
+
+Testers said the app kept repeating "sit back in the chair" when they were sitting correctly, kept saying "uncross your legs" when their legs weren't crossed (from the side the camera can't see the far leg), and was too strict overall. We asked Claude to find the causes and fix them.
+
+**What Claude generated:**
+
+- `js/checks.js`: trunk lean now tells forward from back, so leaning back against the chair passes. The posture model can no longer fail someone for leaning back (its training labels count leaning back as "not upright"). Framing gives specific directions (too far or too close, turn sideways, turn around, tilt up or down) and only needs the cuffed side. The legs check only counts clearly seen joints. The feet check is measured in torso lengths. New helpers: `torsoLength`, `facesCamera`, `sideView`.
+- `js/coach.js`: a how-to tip for each check, spoken when a problem repeats, "Good." after a fix, and a 2-second hold before a problem is spoken.
+- `index.html`, `js/engine.js`, `js/main.js`, `js/readings.js`: a "How long to rest first?" choice (5, 3 or 1 minute, or none) with an explanation. Less than 5 minutes is not Verified, and the form says why.
+- Tests updated and added (44 in total), plus updates to HOW_IT_WORKS.md and a new CONTEXT.md project summary.
+
+**What we (the students) did:**
+
+- Found the problems by testing with a real cuff, and decided the rest-time options.
+- _(Fill in: retest results, thresholds you changed after these fixes, wording you rewrote.)_
