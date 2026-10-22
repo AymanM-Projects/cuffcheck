@@ -6,7 +6,7 @@ let log = null;
 let startTime = 0;
 let lastSecond = -1;
 
-// Starts a new log. settings = { cuffArm, camera, demoMode, microphone }.
+// Starts a new log. settings = { cuffArm, camera, demoMode, restSeconds, microphone }.
 export function startLog(settings, now = Date.now()) {
   log = { app: "CuffCheck", format: 1, started: new Date(now).toISOString(), settings, seconds: [], reading: null };
   startTime = now;

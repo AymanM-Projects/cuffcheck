@@ -6,6 +6,7 @@
 export const COACH_ORDER = ["framing", "seated", "back", "legs", "feet", "arm", "talking", "rest"];
 export const ANY_LINE_GAP_MS = 3000;    // never speak twice within 3 s
 export const SAME_LINE_GAP_MS = 15000;  // TEAM TUNES THIS - wait this long before repeating a line
+export const PROBLEM_HOLD_MS = 2000;    // TEAM TUNES THIS - a problem must last this long before it is spoken
 
 // TEAM TUNES THIS wording
 export const LINES = {
@@ -59,6 +60,8 @@ export function createSpeaker(sayAloud) {
   let lastLine = null;
   let lastTime = -Infinity;
   let lastFixId = null;          // the check we last asked the user to fix
+  let problemId = null;          // the problem on screen now, and since when
+  let problemSince = 0;
   const saidOnce = new Set();
   const timesSaid = new Map();   // line -> how often it was spoken
   return {
@@ -66,12 +69,21 @@ export function createSpeaker(sayAloud) {
       lastLine = null;
       lastTime = -Infinity;
       lastFixId = null;
+      problemId = null;
       saidOnce.clear();
       timesSaid.clear();
     },
     // Says the message's line if the timing rules allow. Returns true if spoken.
     offer(message, now) {
       if (!message.line) return false;
+      // A problem that flickers on for a moment is shown but not spoken.
+      const isProblem = Boolean(message.tip);
+      if (!isProblem) problemId = null;
+      else if (message.id !== problemId) {
+        problemId = message.id;
+        problemSince = now;
+      }
+      if (isProblem && now - problemSince < PROBLEM_HOLD_MS) return false;
       if (message.once && saidOnce.has(message.line)) return false;
       if (now - lastTime < ANY_LINE_GAP_MS) return false;
       if (message.line === lastLine && now - lastTime < SAME_LINE_GAP_MS) return false;

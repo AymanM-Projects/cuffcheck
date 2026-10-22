@@ -76,10 +76,12 @@ function handleFrame(frame) {
 
 async function handleStartCheck() {
   const demo = $("opt-demo").checked;
-  startSession(demo);
+  const restSeconds = Number(radioValue("rest"));
+  startSession(demo, restSeconds);
+  rows.rest.li.querySelector("span:nth-child(2)").textContent = restLabel(demo, restSeconds);
   speaker.reset();
   if ($("opt-speech").checked) speakAloud(LINES.start); // speaking inside the tap unlocks speech on iPhone
-  startLog({ cuffArm: radioValue("arm"), camera: radioValue("camera"), demoMode: demo, microphone: $("opt-mic").checked });
+  startLog({ cuffArm: radioValue("arm"), camera: radioValue("camera"), demoMode: demo, restSeconds, microphone: $("opt-mic").checked });
   $("setup").open = false;
   if ($("opt-mic").checked) {
     try {
@@ -89,6 +91,14 @@ async function handleStartCheck() {
       setStatus("Microphone not available. Talking is checked by watching your mouth only.");
     }
   }
+}
+
+// Checklist label for the rest row, e.g. "Rested 3 minutes".
+function restLabel(demo, restSeconds) {
+  if (demo) return "Rested 30 seconds (demo)";
+  if (restSeconds === 0) return "Rest timer off";
+  const minutes = restSeconds / 60;
+  return "Rested " + minutes + (minutes === 1 ? " minute" : " minutes");
 }
 
 function handleEnterReading() {

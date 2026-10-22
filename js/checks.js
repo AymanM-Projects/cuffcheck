@@ -19,9 +19,13 @@ export const FACING_THIGH_RATIO = 0.4;   // TEAM TUNES THIS - thighs shorter tha
 export const TOO_FAR_TORSO = 0.12;       // TEAM TUNES THIS - torso shorter than this share of the picture height = too far
 export const TOO_CLOSE_TORSO = 0.45;     // TEAM TUNES THIS - torso taller than this share = too close
 export const EDGE_MARGIN = 0.02;         // a hidden point this near the edge counts as cut off
-export const MODEL_CROSSED_MAX = 0.5;    // TEAM TUNES THIS - above this the model says legs are crossed
-export const CROSS_MIN_GAP = 0.03;       // TEAM TUNES THIS - closer than this = can't tell left from right
-export const FEET_MIN_DROP = 0.05;       // TEAM TUNES THIS - an ankle must sit this far below its knee
+export const MODEL_CROSSED_MAX = 0.85;   // TEAM TUNES THIS - the model alone fails legs only when this sure
+export const SURE_VISIBILITY = 0.8;      // TEAM TUNES THIS - a point must be this clearly seen to count as proof of a mistake
+export const CROSS_MIN_GAP = 0.06;       // TEAM TUNES THIS - closer than this = can't tell left from right
+export const SIDE_VIEW_RATIO = 0.35;     // TEAM TUNES THIS - shoulders narrower than this (torso lengths) = side view
+export const KNEE_LEVEL_LIMIT = 0.2;     // TEAM TUNES THIS - knee heights this far apart (torso lengths) = knee over knee
+export const ANKLE_RAISED_LIMIT = 0.15;  // TEAM TUNES THIS - an ankle this close to knee height = ankle over knee
+export const FEET_MIN_DROP = 0.3;        // TEAM TUNES THIS - an ankle must sit this far below its knee (torso lengths)
 export const CUFF_RATIO = 0.6;           // TEAM TUNES THIS - cuff centre: 0 = shoulder, 1 = elbow
 export const HEART_RATIO = 0.25;         // TEAM TUNES THIS - mid-chest: 0 = shoulder, 1 = hip
 export const HEART_TOLERANCE = 0.1;      // TEAM TUNES THIS - allowed gap, in torso lengths
@@ -78,11 +82,13 @@ export function checkFraming(landmarks, cuffArm, aspect = 4 / 3) {
 
   const right = cuffArm === "right";
   const cuffElbow = right ? POINT.RIGHT_ELBOW : POINT.LEFT_ELBOW;
+  // Only the cuffed side, which faces the camera. The far side hides behind
+  // the body in a side view, so it is never required.
   const needed = [
-    ["shoulders", [POINT.LEFT_SHOULDER, POINT.RIGHT_SHOULDER], "all"],
-    ["hips", [POINT.LEFT_HIP, POINT.RIGHT_HIP], "all"],
+    ["shoulder", [right ? POINT.RIGHT_SHOULDER : POINT.LEFT_SHOULDER], "all"],
+    ["hip", [right ? POINT.RIGHT_HIP : POINT.LEFT_HIP], "all"],
     ["cuffed elbow", [cuffElbow], "all"],
-    ["knees", [POINT.LEFT_KNEE, POINT.RIGHT_KNEE], "all"],
+    ["knee", [right ? POINT.RIGHT_KNEE : POINT.LEFT_KNEE], "all"],
     ["feet", [POINT.LEFT_ANKLE, POINT.RIGHT_ANKLE], "any"],
   ];
   const missingParts = needed.filter(([, ids, rule]) =>
@@ -91,7 +97,7 @@ export function checkFraming(landmarks, cuffArm, aspect = 4 / 3) {
 
   const missing = missingParts.map(([name]) => name);
   const missingIds = missingParts.flatMap(([, ids]) => ids);
-  if (missing.includes("cuffed elbow") && cuffArmIsFar(landmarks, right)) {
+  if (cuffArmIsFar(landmarks, right)) {
     return fail(`Your cuffed arm is on the far side. Turn around so your ${cuffArm} arm faces the camera.`, size);
   }
   const edges = cutOffEdges(landmarks, missingIds, aspect);
@@ -133,6 +139,16 @@ export function facesCamera(landmarks) {
     .map(([hip, knee]) => Math.hypot(knee.x - hip.x, knee.y - hip.y) / torso);
   const shoulderWidth = Math.abs(ls.x - rs.x) / torso;
   return shoulderWidth > FACING_SHOULDER_RATIO || (thighs.length > 0 && Math.max(...thighs) < FACING_THIGH_RATIO);
+}
+
+// True when the camera sees the person's side: the shoulders look narrow, or
+// one shoulder is hidden behind the body. Left/right order means little then.
+export function sideView(landmarks) {
+  const torso = torsoLength(landmarks);
+  if (!torso) return false;
+  const ls = seen(landmarks, POINT.LEFT_SHOULDER), rs = seen(landmarks, POINT.RIGHT_SHOULDER);
+  if (!ls || !rs) return true;
+  return Math.abs(ls.x - rs.x) / torso < SIDE_VIEW_RATIO;
 }
 
 // True when the cuffed shoulder is farther from the camera than the other one
@@ -223,30 +239,53 @@ export function trunkLeanAngle(landmarks) {
   return Math.atan2(dx, dy) * 180 / Math.PI;
 }
 
-// ---- Legs uncrossed: crossed legs swap left/right order between hips,
-// knees and ankles. The posture model (if loaded) can also say "crossed".
-// When the rule can't tell sides apart, a "not crossed" model answer passes.
+// ---- Legs uncrossed: only a clearly seen sign of crossing fails. MediaPipe
+// still guesses where a hidden leg is, and those guesses must never count.
+// Side view: a knee or ankle lifted onto the other leg. Angled or front view:
+// left/right order swapping between hips, knees and ankles. The posture model
+// (trained on front views) can fail it alone only when it is very sure.
 export function checkLegsUncrossed(landmarks, crossedChance = null) {
-  const leftKnee = seen(landmarks, POINT.LEFT_KNEE), rightKnee = seen(landmarks, POINT.RIGHT_KNEE);
-  const leftAnkle = seen(landmarks, POINT.LEFT_ANKLE), rightAnkle = seen(landmarks, POINT.RIGHT_ANKLE);
-  const leftHip = seen(landmarks, POINT.LEFT_HIP), rightHip = seen(landmarks, POINT.RIGHT_HIP);
-  if (!leftKnee || !rightKnee) return unseen("I can't see both knees.");
-  if (!leftAnkle || !rightAnkle) return unseen("I can't see both ankles. Turn your chair a little toward the camera.");
-
-  const orders = [
-    leftHip && rightHip ? sideOrder(leftHip, rightHip) : 0,
-    sideOrder(leftKnee, rightKnee),
-    sideOrder(leftAnkle, rightAnkle),
-  ].filter((order) => order !== 0);
-  const ruleSaysCrossed = orders.some((order) => order !== orders[0]);
+  const torso = torsoLength(landmarks);
+  if (!torso || !(seen(landmarks, POINT.LEFT_KNEE) || seen(landmarks, POINT.RIGHT_KNEE))) {
+    return unseen("I can't see your knees.");
+  }
+  const ruleSaysCrossed = sideView(landmarks) ? legLifted(landmarks, torso) : orderSwapped(landmarks);
   const modelSaysCrossed = crossedChance !== null && crossedChance > MODEL_CROSSED_MAX;
   const value = crossedChance === null ? null : round2(crossedChance);
   // TEAM TUNES THIS wording
   if (ruleSaysCrossed || modelSaysCrossed) return fail("Uncross your legs.", value);
-  if (orders.length === 0 && crossedChance === null) {
-    return unseen("Turn a little toward the camera so I can see both legs.");
+  return pass("Legs look uncrossed.", value);
+}
+
+// The landmark only if it is CLEARLY seen (proof, not a guess).
+function sure(landmarks, index) {
+  const point = landmarks ? landmarks[index] : null;
+  return point && point.visibility >= SURE_VISIBILITY ? point : null;
+}
+
+// Side view: one knee clearly higher than the other, or an ankle up near knee height.
+function legLifted(landmarks, torso) {
+  const lk = sure(landmarks, POINT.LEFT_KNEE), rk = sure(landmarks, POINT.RIGHT_KNEE);
+  if (lk && rk && Math.abs(lk.y - rk.y) / torso > KNEE_LEVEL_LIMIT) return true;
+  for (const [k, a] of [[POINT.LEFT_KNEE, POINT.LEFT_ANKLE], [POINT.RIGHT_KNEE, POINT.RIGHT_ANKLE]]) {
+    const knee = sure(landmarks, k), ankle = sure(landmarks, a);
+    if (knee && ankle && (ankle.y - knee.y) / torso < ANKLE_RAISED_LIMIT) return true;
   }
-  return pass("Legs are uncrossed.", value);
+  return false;
+}
+
+// Angled or front view: crossed legs swap left/right order between hips, knees and ankles.
+function orderSwapped(landmarks) {
+  const pairs = [
+    [POINT.LEFT_HIP, POINT.RIGHT_HIP], [POINT.LEFT_KNEE, POINT.RIGHT_KNEE], [POINT.LEFT_ANKLE, POINT.RIGHT_ANKLE],
+  ];
+  const orders = pairs
+    .map(([l, r]) => {
+      const left = sure(landmarks, l), right = sure(landmarks, r);
+      return left && right ? sideOrder(left, right) : 0;
+    })
+    .filter((order) => order !== 0);
+  return orders.some((order) => order !== orders[0]);
 }
 
 // +1 or -1 for which side the left point is on, 0 if too close to tell.
@@ -256,18 +295,21 @@ function sideOrder(leftPoint, rightPoint) {
   return gap > 0 ? 1 : -1;
 }
 
-// ---- Feet flat: each visible ankle sits clearly below its knee ----
+// ---- Feet flat: the ankle sits well below the knee, measured in torso
+// lengths so distance from the camera doesn't matter. Judges the most visible
+// leg; the other leg counts only if it is clearly seen.
 export function checkFeetFlat(landmarks) {
-  const legs = [[POINT.LEFT_KNEE, POINT.LEFT_ANKLE], [POINT.RIGHT_KNEE, POINT.RIGHT_ANKLE]];
-  const drops = [];
-  for (const [k, a] of legs) {
-    const knee = seen(landmarks, k), ankle = seen(landmarks, a);
-    if (knee && ankle) drops.push(ankle.y - knee.y); // positive = ankle below knee
-  }
-  if (drops.length === 0) return unseen("I can't see your ankles.");
-  const lowest = round2(Math.min(...drops));
+  const torso = torsoLength(landmarks);
+  const legs = [[POINT.LEFT_KNEE, POINT.LEFT_ANKLE], [POINT.RIGHT_KNEE, POINT.RIGHT_ANKLE]]
+    .map(([k, a]) => ({ knee: seen(landmarks, k), ankle: seen(landmarks, a) }))
+    .filter((leg) => leg.knee && leg.ankle);
+  if (!torso || legs.length === 0) return unseen("I can't see your ankles.");
+  const clarity = (leg) => Math.min(leg.knee.visibility, leg.ankle.visibility);
+  const nearest = legs.reduce((best, leg) => (clarity(leg) > clarity(best) ? leg : best));
+  const judged = legs.filter((leg) => leg === nearest || clarity(leg) >= SURE_VISIBILITY);
+  const lowest = round2(Math.min(...judged.map((leg) => (leg.ankle.y - leg.knee.y) / torso)));
   // TEAM TUNES THIS wording
-  if (lowest < FEET_MIN_DROP) return fail("Put both feet flat on the floor.", lowest);
+  if (lowest < FEET_MIN_DROP) return fail("Put your feet flat on the floor.", lowest);
   return pass("Feet are flat on the floor.", lowest);
 }
 

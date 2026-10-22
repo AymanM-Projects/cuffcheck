@@ -183,6 +183,11 @@ function problemText(checkResult) {
     reasons.push("these checks slipped during the reading: " + checkResult.failedChecks.map((id) => CHECK_LABELS[id] || id).join(", "));
   }
   if (checkResult.tooShort) reasons.push("the reading took less than a real cuff reading");
+  if (checkResult.shortRest) {
+    reasons.push(checkResult.restSeconds > 0
+      ? "you rested " + checkResult.restSeconds / 60 + " minute" + (checkResult.restSeconds === 60 ? "" : "s") + ", not the 5 minutes guidelines ask for"
+      : "the rest timer was off; guidelines ask for 5 minutes of quiet rest first");
+  }
   return reasons.join("; ");
 }
 

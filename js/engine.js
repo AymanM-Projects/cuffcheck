@@ -70,10 +70,12 @@ export function runChecks(frame, settings, now = Date.now()) {
 }
 
 // Starts a check session (the Start check button).
-export function startSession(demoMode) {
+// restSeconds is the user's choice (0, 1, 3 or 5 minutes); less than the
+// guideline's 5 minutes is allowed but the reading will not be Verified.
+export function startSession(demoMode, restSeconds = REST_SECONDS) {
   state.phase = "resting";
   state.demo = Boolean(demoMode);
-  state.requiredRest = demoMode ? DEMO_REST_SECONDS : REST_SECONDS;
+  state.requiredRest = demoMode ? DEMO_REST_SECONDS : restSeconds;
   state.restSeconds = 0;
   state.measureStart = null;
   state.problems.clear();
@@ -94,11 +96,14 @@ export function finishReading(now = Date.now()) {
   const measured = state.phase === "measuring";
   const seconds = measured ? Math.round((now - state.measureStart) / 1000) : 0;
   const tooShort = measured && seconds < MIN_READING_SECONDS;
+  const shortRest = !state.demo && state.requiredRest < REST_SECONDS;
   const result = {
-    verified: measured && state.problems.size === 0 && !tooShort,
+    verified: measured && state.problems.size === 0 && !tooShort && !shortRest,
     reachedMeasuring: measured,       // false = entered before every check had passed
     failedChecks: [...state.problems], // check ids that slipped while measuring
     tooShort,
+    shortRest,                         // the rest timer was set below 5 minutes
+    restSeconds: state.requiredRest,
     measuredSeconds: seconds,
     demo: state.demo,
   };

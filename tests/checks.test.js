@@ -25,6 +25,7 @@ function sideViewBody(changes = {}) {
 // The same person from the front: left and right apart on screen.
 function frontViewBody(changes = {}) {
   const body = sideViewBody();
+  place(body, POINT.LEFT_SHOULDER, 0.62, 0.30); place(body, POINT.RIGHT_SHOULDER, 0.38, 0.30);
   place(body, POINT.LEFT_HIP, 0.60, 0.55);   place(body, POINT.RIGHT_HIP, 0.40, 0.55);
   place(body, POINT.LEFT_KNEE, 0.60, 0.70);  place(body, POINT.RIGHT_KNEE, 0.40, 0.70);
   place(body, POINT.LEFT_ANKLE, 0.60, 0.85); place(body, POINT.RIGHT_ANKLE, 0.40, 0.85);
@@ -48,7 +49,9 @@ test("framing: passes, names missing parts, respects the cuffed arm, unseen when
   assert.equal(checkFraming(sideViewBody(), "left").status, "pass");
   const kneeHidden = checkFraming(sideViewBody({ [POINT.LEFT_KNEE]: hidden }), "left");
   assert.equal(kneeHidden.status, "fail");
-  assert.match(kneeHidden.reason, /knees/);
+  assert.match(kneeHidden.reason, /knee/);
+  const farSideHidden = sideViewBody({ [POINT.RIGHT_SHOULDER]: hidden, [POINT.RIGHT_HIP]: hidden, [POINT.RIGHT_KNEE]: hidden });
+  assert.equal(checkFraming(farSideHidden, "left").status, "pass", "the far side is never required");
   const elbowHidden = sideViewBody({ [POINT.RIGHT_ELBOW]: hidden });
   assert.equal(checkFraming(elbowHidden, "left").status, "pass");
   assert.equal(checkFraming(elbowHidden, "right").status, "fail");
@@ -154,18 +157,35 @@ test("legs: front view uncrossed passes; ankles or knees swapped fails", () => {
   assert.equal(checkLegsUncrossed(kneeOverKnee).status, "fail");
 });
 
-test("legs: side view needs the model; the model can also catch crossing", () => {
-  assert.equal(checkLegsUncrossed(sideViewBody()).status, "unseen");
-  assert.equal(checkLegsUncrossed(sideViewBody(), 0.1).status, "pass");
+test("legs: side view with the far leg hidden or guessed passes, never unseen", () => {
+  assert.equal(checkLegsUncrossed(sideViewBody()).status, "pass");
+  const farLegHidden = sideViewBody({ [POINT.RIGHT_KNEE]: hidden, [POINT.RIGHT_ANKLE]: hidden });
+  assert.equal(checkLegsUncrossed(farLegHidden).status, "pass");
+  // A poorly seen far leg guessed in a strange place is not proof of crossing.
+  const guessed = sideViewBody({ [POINT.RIGHT_KNEE]: { y: 0.45, visibility: 0.6 }, [POINT.RIGHT_ANKLE]: { y: 0.50, visibility: 0.6 } });
+  assert.equal(checkLegsUncrossed(guessed).status, "pass");
+});
+
+test("legs: side view fails for a clearly seen ankle over knee or knee over knee", () => {
+  const ankleOverKnee = sideViewBody({ [POINT.RIGHT_ANKLE]: { x: 0.68, y: 0.56 } });
+  assert.equal(checkLegsUncrossed(ankleOverKnee).status, "fail");
+  const kneeOverKnee = sideViewBody({ [POINT.RIGHT_KNEE]: { y: 0.50 } });
+  assert.equal(checkLegsUncrossed(kneeOverKnee).status, "fail");
+});
+
+test("legs: the model alone fails only when very sure", () => {
+  assert.equal(checkLegsUncrossed(sideViewBody(), 0.6).status, "pass");
   assert.equal(checkLegsUncrossed(sideViewBody(), 0.9).status, "fail");
   assert.equal(checkLegsUncrossed(frontViewBody(), 0.9).status, "fail");
-  assert.equal(checkLegsUncrossed(frontViewBody({ [POINT.LEFT_ANKLE]: hidden }), 0.1).status, "unseen");
 });
 
 test("feet: ankles below knees pass, a raised ankle fails, hidden is unseen", () => {
   assert.equal(checkFeetFlat(sideViewBody()).status, "pass");
   assert.equal(checkFeetFlat(sideViewBody({ [POINT.LEFT_ANKLE]: { y: 0.58 } })).status, "fail");
   assert.equal(checkFeetFlat(sideViewBody({ [POINT.LEFT_ANKLE]: hidden, [POINT.RIGHT_ANKLE]: hidden })).status, "unseen");
+  // A badly guessed far ankle does not fail it.
+  const guessedFar = sideViewBody({ [POINT.RIGHT_ANKLE]: { y: 0.58, visibility: 0.6 } });
+  assert.equal(checkFeetFlat(guessedFar).status, "pass");
 });
 
 test("arm: resting at heart level passes", () => {

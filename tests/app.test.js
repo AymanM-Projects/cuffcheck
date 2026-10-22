@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { POINT } from "../js/checks.js";
 import { runChecks, resetEngine, startSession, finishReading, getPhase, CHECK_IDS } from "../js/engine.js";
 import { setPostureModel } from "../js/model.js";
-import { pickMessage, createSpeaker, LINES, TIPS, ANY_LINE_GAP_MS, SAME_LINE_GAP_MS } from "../js/coach.js";
+import { pickMessage, createSpeaker, LINES, TIPS, ANY_LINE_GAP_MS, SAME_LINE_GAP_MS, PROBLEM_HOLD_MS } from "../js/coach.js";
 import { validateReading, classifyReading, summarize } from "../js/readings.js";
 import { startLog, logResults, attachReading, getLog } from "../js/sessionLog.js";
 
@@ -138,10 +138,44 @@ test("speaker: a repeated problem adds the how-to tip; fixing it earns a 'Good.'
   const said = [];
   const speaker = createSpeaker((line) => said.push(line));
   const back = { id: "back", line: "Sit back.", tip: "Shoulder blades on the chair." };
+  const arm = { id: "arm", line: "Raise your arm.", tip: "Use a pillow." };
   speaker.offer(back, 0);
-  speaker.offer(back, SAME_LINE_GAP_MS);
-  speaker.offer({ id: "arm", line: "Raise your arm.", tip: "Use a pillow." }, SAME_LINE_GAP_MS * 2);
+  speaker.offer(back, PROBLEM_HOLD_MS);
+  speaker.offer(back, PROBLEM_HOLD_MS + SAME_LINE_GAP_MS);
+  const t = PROBLEM_HOLD_MS * 2 + SAME_LINE_GAP_MS * 2;
+  speaker.offer(arm, t);
+  speaker.offer(arm, t + PROBLEM_HOLD_MS);
   assert.deepEqual(said, ["Sit back.", "Sit back. Shoulder blades on the chair.", "Good. Raise your arm."]);
+});
+
+test("speaker: a problem that flickers for under 2 s is never spoken", () => {
+  const said = [];
+  const speaker = createSpeaker((line) => said.push(line));
+  const legs = { id: "legs", line: "Uncross your legs.", tip: "Feet apart." };
+  assert.equal(speaker.offer(legs, 0), false);
+  assert.equal(speaker.offer(legs, PROBLEM_HOLD_MS - 1), false);
+  speaker.offer({ id: "ready", line: "Ready", once: true }, PROBLEM_HOLD_MS - 1); // problem went away
+  assert.equal(speaker.offer(legs, PROBLEM_HOLD_MS + 100), false, "the hold restarts when the problem comes back");
+  assert.deepEqual(said, ["Ready"]);
+});
+
+test("rest choice: a 1-minute rest measures but is not Verified; no timer starts measuring at once", () => {
+  resetEngine();
+  setPostureModel(calmModel);
+  startSession(false, 60);
+  let clock = play(goodFrame, 0, 63).time;
+  assert.equal(getPhase(), "measuring");
+  clock = play(goodFrame, clock, 25).time;
+  const short = finishReading(clock);
+  assert.equal(short.verified, false);
+  assert.equal(short.shortRest, true);
+  assert.equal(short.restSeconds, 60);
+
+  resetEngine();
+  startSession(false, 0);
+  play(goodFrame, 0, 3);
+  assert.equal(getPhase(), "measuring");
+  setPostureModel(null);
 });
 
 test("readings: validation catches blanks, impossible numbers and swapped numbers", () => {
