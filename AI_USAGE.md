@@ -122,3 +122,19 @@ Testers said the app kept repeating "sit back in the chair" when they were sitti
 
 - Found the problems by testing with a real cuff, and decided the rest-time options.
 - _(Fill in: retest results, thresholds you changed after these fixes, wording you rewrote.)_
+
+## Auto-start for checking alone (Oct 26, 2026)
+
+Someone checking alone sits about 2 meters from the phone, so they can't reach over and press Start check. We asked Claude for an option that starts the check by itself once every check passes.
+
+**What Claude generated:**
+
+- New `js/autostart.js`: once every check except the rest timer passes (rest only runs after Start check), the coach says "All clear", counts down 5 seconds (`AUTO_START_SECONDS`, TEAM TUNES THIS) and starts the check. Moving out of position during the countdown starts it over. Talking doesn't cancel it, because the mic hears the coach's own voice, but the check itself still waits for quiet before measuring.
+- `index.html`: a new option, "Start the check by itself when everything looks right (for checking alone)". It's off by default.
+- `js/main.js`: shows the countdown in the coach card. Auto-start arms on a tap (Start camera, Stop check, the Check tab, or the option itself), because phones only allow speech and the microphone after a tap. `js/coach.js`: two new spoken lines.
+- New `tests/autostart.test.js` (7 tests, 51 in total).
+
+**What we (the students) did:**
+
+- Asked for the feature after testing alone.
+- _(Fill in: retest results, whether 5 seconds feels right, wording changes.)_

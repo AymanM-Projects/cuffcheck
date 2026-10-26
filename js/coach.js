@@ -15,6 +15,8 @@ export const LINES = {
   resting: "Good. Now relax and stay still and quiet. I'll tell you when to start your monitor.",
   ready: "Everything looks right. Press start on your blood pressure monitor now, and stay still and quiet until it finishes.",
   measuring: "Measuring. Stay still and quiet. When your monitor finishes, press Enter my reading.",
+  autoArmed: "Auto-start is on. Get into position, and I'll start the check when everything looks right.",
+  autoClear: "All clear. Starting the check in {n} seconds. Stay where you are.", // {n} = the countdown
 };
 
 // TEAM TUNES THIS wording - how to fix each problem. Shown under the message,

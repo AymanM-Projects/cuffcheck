@@ -7,9 +7,11 @@ import { pickMessage, createSpeaker, speakAloud, LINES } from "./coach.js";
 import { initReadings, openReadingForm, renderHistory } from "./readings.js";
 import { startLog, logResults, downloadLog } from "./sessionLog.js";
 import { loadPostureModel } from "./model.js";
+import { createAutoStart } from "./autostart.js";
 
 const $ = (id) => document.getElementById(id);
 const speaker = createSpeaker(speakAloud);
+const autoStart = createAutoStart();
 let cameraOn = false;
 
 function setStatus(text) {
@@ -37,6 +39,7 @@ function showScreen(name) {
 // Pressing Start camera (again) also switches cameras if the choice changed.
 async function handleStartCamera() {
   $("start-button").disabled = true;
+  armAutoStart();
   const facing = radioValue("camera");
   $("stage").classList.toggle("mirrored", facing === "user");
   try {
@@ -66,7 +69,7 @@ function handleFrame(frame) {
   const phase = getPhase();
   updateChecklist(results);
   showStep(phase);
-  showCoach(results, phase, now);
+  if (!runAutoStart(results, phase, now)) showCoach(results, phase, now);
   if (phase !== "setup") logResults(results, phase, now);
   if ($("opt-numbers").checked) showNumbers(results);
   updateButtons(phase, results);
@@ -75,6 +78,7 @@ function handleFrame(frame) {
 // ---- Check session ----
 
 async function handleStartCheck() {
+  autoStart.disarm();
   const demo = $("opt-demo").checked;
   const restSeconds = Number(radioValue("rest"));
   startSession(demo, restSeconds);
@@ -111,6 +115,34 @@ function handleStopCheck() {
   stopSession();
   stopMicrophone();
   $("setup").open = true;
+}
+
+// ---- Auto-start, for someone checking alone ----
+
+// Called from a tap (Start camera, Stop check, the Check tab, the option
+// itself), because phones only allow speech and the microphone after a tap.
+function armAutoStart() {
+  if (!$("opt-auto").checked) return;
+  autoStart.arm();
+  if ($("opt-speech").checked) speakAloud(LINES.autoArmed);
+  if ($("opt-mic").checked) startMicrophone().catch((err) => console.warn(err));
+}
+
+// Shows the countdown and starts the check when it reaches zero.
+// Returns true while the countdown is on screen instead of the coach message.
+function runAutoStart(results, phase, now) {
+  const onCheckScreen = !$("screen-check").hidden;
+  const auto = autoStart.update(results, onCheckScreen ? phase : "away", now);
+  if (auto.state === "go") handleStartCheck();
+  if (auto.state !== "counting") return false;
+  if (auto.justCleared && $("opt-speech").checked) speakAloud(LINES.autoClear.replace("{n}", auto.secondsLeft));
+  const text = "All clear. Starting the check in " + auto.secondsLeft + "…";
+  if (text !== lastCoachText) {
+    $("coach").textContent = text;
+    $("coach-tip").hidden = true;
+    lastCoachText = text;
+  }
+  return true;
 }
 
 // Shows only the buttons that make sense right now.
@@ -204,7 +236,8 @@ function handleTextKeys(event) {
 $("start-button").addEventListener("click", handleStartCamera);
 $("session-button").addEventListener("click", handleStartCheck);
 $("reading-button").addEventListener("click", handleEnterReading);
-$("stop-button").addEventListener("click", handleStopCheck);
+$("stop-button").addEventListener("click", () => { handleStopCheck(); armAutoStart(); });
+$("opt-auto").addEventListener("change", () => { if ($("opt-auto").checked && cameraOn) armAutoStart(); else autoStart.disarm(); });
 $("text-larger").addEventListener("click", () => setTextScale(textScale + TEXT_SCALE_STEP));
 $("text-smaller").addEventListener("click", () => setTextScale(textScale - TEXT_SCALE_STEP));
 $("opt-demo").addEventListener("change", () => { $("demo-banner").hidden = !$("opt-demo").checked; });
@@ -214,7 +247,10 @@ $("export-button").addEventListener("click", () => {
 });
 document.addEventListener("keydown", handleTextKeys);
 for (const button of document.querySelectorAll("[data-screen]")) {
-  button.addEventListener("click", () => showScreen(button.dataset.screen));
+  button.addEventListener("click", () => {
+    showScreen(button.dataset.screen);
+    if (button.dataset.screen === "check" && cameraOn && getPhase() === "setup") armAutoStart();
+  });
 }
 
 // When the user switches apps, stop the camera and mic to save battery and privacy.
